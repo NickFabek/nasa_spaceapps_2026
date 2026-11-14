@@ -13,6 +13,11 @@ export const FOUND = [
     url: '?ra=303.11985&dec=31.78993&fov=6&at=0,0',
   },
   {
+    kind: 'New candidate', name: '2MASS J19053064+0612311',
+    what: 'An extremely red star hidden in the dust of the Galactic plane, with no SIMBAD entry. It brightened steadily through three passes, 24% at 4.7 µm in a year.',
+    url: '?ra=286.37767&dec=6.20867&fov=6&bands=3456&at=0,0',
+  },
+  {
     kind: 'Caught changing', name: 'Serpens protostar [HMH2007] 67',
     what: 'Invisible below 2.4 µm. Four to five times brighter at 4–5 µm in Sep 2025 than in either 2026 pass.',
     url: '?ra=277.27588&dec=0.51176&fov=6&bands=56&at=0,0',
@@ -33,4 +38,4 @@ export const FOUND = [
     url: "?ra=269.44607&dec=4.77071&fov=6&name=Barnard's+Star",
   },
 ];
-export const FOUND_NOTE = 'From scans of about 175 fields run by an AI agent through this page\'s WebMCP tools. "New candidate" means the change is real in SPHEREx data and the star is not listed as variable in SIMBAD, the AAVSO index, Gaia DR3 or the ZTF and WISE variable catalogues. It still needs independent confirmation.';
+export const FOUND_NOTE = 'From scans of about 250 fields run by an AI agent, first through this page\'s WebMCP tools and then with the same code offline. "New candidate" means the change is real in SPHEREx data and the star is not listed as variable in SIMBAD, the AAVSO index, Gaia DR3 or the ZTF and WISE variable catalogues. It still needs independent confirmation.';

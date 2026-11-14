@@ -89,8 +89,13 @@ async function go(ra, dec, name = '', random = false) {
   // NASA's archive index sometimes refuses requests for a minute at a time, so be patient.
   let res;
   for (let attempt = 1; attempt <= 10; attempt++) {
-    try { res = await (await fetch(`api/search?ra=${ra}&dec=${dec}`)).json(); } catch (e) { res = { error: String(e) }; }
+    try {
+      const r = await fetch(`api/search?ra=${ra}&dec=${dec}`);
+      // When the site's daily request allowance is used up, the host answers API calls with the page itself.
+      res = /json/.test(r.headers.get('content-type') || '') ? await r.json() : { quota: true };
+    } catch (e) { res = { error: String(e) }; }
     if (gen !== S.gen) return;
+    if (res.quota) return setStatus('This site has used up its free request allowance for today.\nIt resets at midnight UTC. Fields you have not opened before cannot load until then.');
     // Accept a complete answer at once; settle for a partial one only after several tries.
     if (res.frames && (!res.errors?.length || attempt >= 6)) break;
     setStatus(`NASA's archive is busy. Trying again… (${attempt})`);

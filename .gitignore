@@ -2,3 +2,6 @@ node_modules/
 .wrangler/
 .DS_Store
 inspiration/
+tools/hunt-results.jsonl
+tools/fields-*.json
+tools/*.log

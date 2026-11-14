@@ -44,8 +44,8 @@ and add the token as `<meta http-equiv="origin-trial" content="…">` in `app/pa
 
 ## What scans have found
 
-An AI agent drove the tool through its WebMCP tools over about 175 fields (star-forming regions and
-the northern Galactic plane) and checked every flagged source against SIMBAD, the AAVSO Variable
+An AI agent drove the tool over about 250 fields (star-forming regions and the northern Galactic
+plane), first through its WebMCP tools and then with `tools/hunt.mjs`, and checked every flagged source against SIMBAD, the AAVSO Variable
 Star Index (VSX), Gaia DR3 and its variability tables, 2MASS, AllWISE, and the ZTF and WISE
 variable-star catalogues.
 
@@ -59,6 +59,15 @@ the above; independent confirmation still needed):
   (Fratta+ 2021). Below 1.1 µm it is unchanged, in agreement with ZTF photometry, which is flat from
   2018 to Oct 2025. Its infrared excess grew from May 2025 to May 2026: +23% at 1.4 µm, +32% at 2 µm,
   +59% at 4.1 µm, +77% at 4.7 µm, consistent with a circumstellar disk building up.
+- **2MASS J19053064+0612311** (RA 286.37767, Dec +6.20867). Extremely red (J−K = 5.4), in the
+  dust of the Galactic plane, no SIMBAD entry, no Gaia counterpart. It brightened through all three
+  passes regardless of season: 4.7 µm +12% (Sep 2025 → Apr 2026) then +10% (→ Sep 2026); 4.1 µm +21%
+  and 2 µm +22% over the year.
+
+Two weaker candidates from the same hunt, real but with caveats: **2MASS J20451747+4430291**
+(RA 311.32274, Dec +44.50809; faded 15–41% between same-season passes, but three Gaia stars are
+blended within 9″) and **2MASS J19164098+1131014** (RA 289.17074, Dec +11.51693; brightened 30–50%
+in three bands, but the bands do not all agree).
 
 **Known objects caught changing**
 
@@ -76,6 +85,20 @@ OGLE GD-LPV-18622, OGLE GD-LPV-23781 and OGLE BLG-LPV-264724.
 2MASS J20161735+3712567 (real change, but already in the Petrosky+ 2021 WISE variables catalogue).
 These rejections shaped the scan's rules: ignore sources beside far brighter ones, require a stable
 position, and prefer comparisons between passes a whole year apart.
+
+## Request allowance
+
+Each field opened for the first time costs about 400 Cloudflare Function requests (one per
+exposure). The free plan allows 100,000 a day, roughly 250 new fields; after that the API stops
+until midnight UTC and the page says so. Fields already opened in the same browser load from its
+cache. For long hunts use `tools/hunt.mjs`, which runs the same search, cutout and scan code in
+Node and makes no Cloudflare requests:
+
+```bash
+node tools/hunt.mjs fields.json          # [["tag", ra, dec], ...]
+node tools/hunt.mjs --inspect 286.37767,6.20867
+node tools/crosscheck.mjs "286.37767,6.20867"
+```
 
 ## How it works
 
