@@ -194,6 +194,27 @@ export function scanField(S) {
       const better = !s.change || (cand.sameSeason && !s.change.sameSeason && z > 6) || (cand.sameSeason === s.change.sameSeason && z > s.change.z);
       if (better && !(s.change && s.change.sameSeason && s.change.z > 6 && !cand.sameSeason)) s.change = cand;
     }
+    // Large changes: when a source is too faint in one pass for exposure-by-exposure ratios (it
+    // appeared, or all but vanished), compare the median flux per band between the two passes.
+    if (!s.change || s.change.z < 6) {
+      for (let a = 0; a < passes.length; a++) for (let b = a + 1; b < passes.length; b++) {
+        const hits = [];
+        let bands = 0;
+        for (let det = 1; det <= 6; det++) {
+          const A = phot.filter((p) => p.pass === passes[a].i && p.det === det).map((p) => p.flux), B = phot.filter((p) => p.pass === passes[b].i && p.det === det).map((p) => p.flux);
+          if (A.length < 4 || B.length < 4) continue;
+          bands++;
+          const ma = median(A), mb = median(B), ea = (mad(A, ma) || 1e-9) / Math.sqrt(A.length), eb = (mad(B, mb) || 1e-9) / Math.sqrt(B.length);
+          const hi = Math.max(ma, mb), lo = Math.min(ma, mb), err = Math.max(ea, eb);
+          if (hi > 10 * err && lo < 0.3 * hi) hits.push({ up: mb > ma, frac: Math.max(lo, 2 * err) / hi });
+        }
+        if (hits.length < 2 || hits.length < bands / 2 || hits.some((h) => h.up !== hits[0].up)) continue;
+        const frac = median(hits.map((h) => h.frac)); // faint level as a fraction of the bright level (an upper limit)
+        const gap = ((passes[b].t0 + passes[b].t1) - (passes[a].t0 + passes[a].t1)) / 2, off = Math.abs(gap / 365.25 - Math.round(gap / 365.25)) * 365.25;
+        const cand = { ratio: hits[0].up ? 1 / frac : frac, z: 8 + hits.length, n: hits.length, from: passes[a].label, to: passes[b].label, sameSeason: gap > 200 && off < 50, byBand: true };
+        if (!s.change || s.change.z < 6 || (cand.sameSeason && !s.change.sameSeason)) s.change = cand;
+      }
+    }
   }
 
   // A 2010 counterpart belongs to the SPHEREx source nearest to it; anything else was a mismatch.
