@@ -58,7 +58,7 @@ export async function registerTools(api) {
     },
     {
       name: 'inspect_position',
-      description: 'Measure one position in the loaded field: the nearest Gaia star (if any), and the infrared spectrum from every SPHEREx exposure, summarised as the median flux in mJy per telescope pass and wavelength band. Also selects that spot in the page so the user sees it.',
+      description: 'Measure one position in the loaded field: the nearest Gaia star (if any), and the infrared spectrum from every SPHEREx exposure, summarised as the median flux in mJy per telescope pass and wavelength band, plus the percentage change per band between passes measured only at matched wavelengths (trust this over comparing the medians). Also selects that spot in the page so the user sees it.',
       inputSchema: { type: 'object', properties: { ra: num('Right ascension in degrees.'), dec: num('Declination in degrees.') }, required: ['ra', 'dec'] },
       annotations: { readOnlyHint: true },
       execute: async ({ ra, dec }) => text(api.inspect(+ra, +dec)),

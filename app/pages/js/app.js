@@ -1019,6 +1019,29 @@ function readout(p) {
 // ---------- functions offered to AI agents (see mcp.js) ----------
 
 const round = (v, d = 2) => (Number.isFinite(v) ? +v.toFixed(d) : null);
+
+// Brightness change per band between each pair of passes, using only exposures at the same wavelength
+// in both. Band medians alone mislead when the two passes sample a steep spectrum at different wavelengths.
+function matchedChanges() {
+  const clean = S.spectrum.filter((p) => !p.bad && p.flux > 0), passes = S.epochs.filter((e) => e.src === 'SPX'), out = [];
+  for (let a = 0; a < passes.length; a++) for (let b = a + 1; b < passes.length; b++) {
+    const A = clean.filter((p) => p.epoch === passes[a].i), B = clean.filter((p) => p.epoch === passes[b].i), bands = [];
+    for (let det = 1; det <= 6; det++) {
+      const logs = [];
+      for (const p of A) {
+        if (p.det !== det) continue;
+        let q = null, qd = (det >= 5 ? 0.005 : 0.012) * p.um;
+        for (const r of B) { const d = Math.abs(r.um - p.um); if (r.det === det && d < qd) { qd = d; q = r; } }
+        if (q) logs.push(Math.log(q.flux / p.flux));
+      }
+      if (logs.length < 3) continue;
+      logs.sort((x, y) => x - y);
+      bands.push({ band: det, micron: `${DET[det].lo}-${DET[det].hi}`, percent: round((Math.exp(logs[logs.length >> 1]) - 1) * 100, 0), pairs: logs.length });
+    }
+    if (bands.length) out.push({ from: passes[a].label, to: passes[b].label, bands });
+  }
+  return out;
+}
 const shareLink = () => location.href;
 const agentApi = {
   async look(target, fieldArcmin) {
@@ -1065,7 +1088,7 @@ const agentApi = {
       gaia: st ? { id: st.id, g_mag: round(st.g, 1), motion_arcsec_per_year: round(st.pm, 3), parallax_mas: round(st.plx, 2), listed_variable: st.var } : (S.gaia ? 'no Gaia star within 8 arcsec' : 'catalogue not loaded'),
       measurements: S.spectrum.length, clean: S.spectrum.filter((p) => !p.bad).length,
       saturated: S.spectrum.length > 0 && S.spectrum.filter((p) => p.saturated).length > 0.6 * S.spectrum.length,
-      spectrum, link: shareLink(),
+      spectrum, change_at_matched_wavelengths: matchedChanges(), link: shareLink(),
     };
   },
   setView(a) {
