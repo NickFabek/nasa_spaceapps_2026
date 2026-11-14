@@ -3,115 +3,176 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Driftscope — watch the SPHEREx sky move</title>
-  <meta name="description" content="Blink, stack and difference NASA SPHEREx infrared images of any patch of sky to find things that move or change.">
+  <title>Driftscope — find what moves in the SPHEREx sky</title>
+  <meta name="description" content="Blink, subtract and stack NASA SPHEREx infrared images of any patch of sky to find things that move or change.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
-    <a class="brand" href="./"><span class="dot"></span>Driftscope</a>
+  <header class="bar">
+    <button class="brand" id="home" title="Start page">DRIFTSCOPE</button>
     <form id="search" class="search">
-      <input id="q" type="text" autocomplete="off" spellcheck="false"
-        placeholder="Object name or RA Dec — e.g. 08h55m10.8s -07d14m42s" aria-label="Object name or coordinates">
-      <select id="fov" aria-label="Field of view">
-        <option value="3">3′ field</option>
-        <option value="6" selected>6′ field</option>
-        <option value="10">10′ field</option>
-        <option value="15">15′ field</option>
-        <option value="20">20′ field</option>
-      </select>
-      <button type="submit">Look</button>
+      <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Any object name or coordinates" aria-label="Object name or coordinates">
+      <div class="seg" id="fov" role="radiogroup" aria-label="Field width in arcminutes" title="How wide a patch to load. Wider catches faster movers but takes longer."></div>
+      <button type="submit" class="solid">Look</button>
     </form>
-    <nav id="presets" class="presets" aria-label="Example targets"></nav>
+    <button id="random" title="Jump to a random patch that nobody has picked">Random patch</button>
+    <button id="share" title="Copy a link to exactly this view">Copy link</button>
+    <button id="help" title="Show the 30-second guide">Guide</button>
   </header>
 
-  <main class="layout">
-    <section class="viewer">
+  <main class="deck">
+    <section class="scope">
       <div class="stage" id="stage">
         <canvas id="gl"></canvas>
         <canvas id="overlay"></canvas>
-        <div class="badge" id="caption"></div>
+        <div class="loadbar"><i id="loadbar"></i></div>
+        <div class="stamp"><b id="stampBig"></b><span id="stampSub"></span></div>
         <div class="readout" id="readout"></div>
         <div class="status" id="status"></div>
       </div>
-      <div class="transport">
-        <button id="prev" title="Previous (←)">◀</button>
-        <button id="play" title="Play / pause (space)">Play</button>
-        <button id="next" title="Next (→)">▶</button>
-        <label class="speed">Speed <input id="speed" type="range" min="0.5" max="12" step="0.5" value="2"></label>
-        <span class="progress" id="progress"></span>
-      </div>
-      <canvas id="timeline" class="timeline" height="96"></canvas>
-    </section>
 
-    <aside class="side">
-      <div class="panel">
-        <div class="tabs" id="modes" role="tablist">
-          <button data-mode="epoch" title="One stacked image per visit of the survey; blink between visits">Blink visits</button>
-          <button data-mode="frame" title="Step through every individual exposure">Frames</button>
-          <button data-mode="diff" title="Subtract one visit from another">Difference</button>
-          <button data-mode="stack" title="Shift every exposure along a motion and add them up">Shift &amp; stack</button>
+      <div class="tape">
+        <button id="play" class="playbtn" title="Play / pause (space)" aria-label="Play"></button>
+        <div class="steps">
+          <button id="prev" title="Previous (←)" aria-label="Previous">‹</button>
+          <button id="next" title="Next (→)" aria-label="Next">›</button>
         </div>
-        <p class="hint" id="modeHint"></p>
-
-        <div id="diffCtl" class="row" hidden>
-          <label>Show <select id="epA"></select></label>
-          <label>minus <select id="epB"></select></label>
-        </div>
-
-        <div id="stackCtl" hidden>
-          <div class="padrow">
-            <canvas id="pad" width="150" height="150" title="Drag to set the motion"></canvas>
-            <div class="padside">
-              <label>East <input id="muE" type="number" step="0.1" value="0"> ″/yr</label>
-              <label>North <input id="muN" type="number" step="0.1" value="0"> ″/yr</label>
-              <label>Pad range <select id="padRange"><option>3</option><option selected>12</option><option>40</option></select> ″/yr</label>
-              <button id="muReset" type="button">Reset</button>
-            </div>
-          </div>
-        </div>
+        <canvas id="timeline" class="timeline"></canvas>
       </div>
 
-      <div class="panel">
-        <h2>Wavelength bands</h2>
-        <div class="chips" id="bands"></div>
-        <p class="hint">Each exposure sees the target at one wavelength. Compare like with like by picking a band.</p>
-      </div>
-
-      <div class="panel">
-        <h2>Display</h2>
-        <label class="slider">Brightness <input id="stretch" type="range" min="0.8" max="4.5" step="0.05" value="2.6"></label>
-        <div class="row">
-          <label><input id="invert" type="checkbox"> Invert</label>
-          <label><input id="nearest" type="checkbox"> Show true pixels</label>
-        </div>
-        <details>
-          <summary>Hide flagged pixels</summary>
+      <div class="tools">
+        <button class="tog" id="tGaia" aria-pressed="true" title="Ring every star the Gaia catalogue already knows, at its position on the date shown"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg>Known stars</button>
+        <button class="tog" id="tWise" aria-pressed="true" title="Add the 2010 WISE image as an extra pass: a 15-year baseline"><svg viewBox="0 0 16 16"><path d="M2 8h12M2 5v6M14 5v6"/></svg>2010 WISE</button>
+        <button class="tog" id="tNearest" aria-pressed="false" title="Show the telescope's real pixels instead of a smoothed image"><svg viewBox="0 0 16 16"><path d="M2 2h5v5H2zM9 9h5v5H9z"/></svg>True pixels</button>
+        <button class="tog" id="tInvert" aria-pressed="false" title="Black dots on white, as astronomers often prefer"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" /><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>Invert</button>
+        <label class="bright" title="Brightness"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3"/></svg><input id="stretch" type="range" min="0.8" max="4.5" step="0.05" value="2.6" aria-label="Brightness"></label>
+        <label class="bright" title="Playback speed"><svg viewBox="0 0 16 16"><path d="M2 3l6 5-6 5zM8 3l6 5-6 5z"/></svg><input id="speed" type="range" min="0.5" max="12" step="0.5" value="1.5" aria-label="Playback speed"></label>
+        <details class="pop" id="flagPop">
+          <summary title="Choose which kinds of bad pixel are blanked out">Hide bad pixels</summary>
           <div class="flags" id="flags"></div>
         </details>
       </div>
+      <p class="prov" id="progress"></p>
+      <p class="partial" id="partial" hidden>Part of the NASA archive did not answer, so some exposures are missing. <button id="retry">Try again</button></p>
+    </section>
 
-      <div class="panel">
-        <h2>Spectrum <span class="sub" id="specTitle">click a source in the image</span></h2>
-        <canvas id="spec" height="210"></canvas>
-        <div class="row">
-          <button id="specCsv" type="button" disabled>Download CSV</button>
-          <span class="sub" id="specNote"></span>
+    <aside class="rack">
+      <div class="modes" id="modes" role="tablist">
+        <button data-mode="epoch">
+          <svg viewBox="0 0 32 32"><circle cx="9" cy="20" r="3" fill="currentColor"/><circle cx="23" cy="10" r="3" stroke-dasharray="2 2"/><path d="M12 18l8-6" stroke-dasharray="1 3"/></svg>
+          <span><b>Blink</b>Flip between telescope passes. Anything that moved will jump.</span>
+        </button>
+        <button data-mode="diff">
+          <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9"/><path d="M16 7a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+          <span><b>Difference</b>Subtract one pass from another. Only what changed is left.</span>
+        </button>
+        <button data-mode="stack">
+          <svg viewBox="0 0 32 32"><path d="M6 26L26 6M26 6h-7M26 6v7"/><circle cx="10" cy="22" r="2" fill="currentColor"/><circle cx="16" cy="16" r="2" fill="currentColor"/></svg>
+          <span><b>Shift &amp; stack</b>Add every image along a motion to pull a faint mover out of the noise.</span>
+        </button>
+        <button data-mode="frame">
+          <svg viewBox="0 0 32 32"><rect x="5" y="11" width="14" height="14"/><path d="M9 11V7h14v14h-4M13 7V3h14v14h-4" /></svg>
+          <span><b>Exposures</b>Every single image in time order, with its quality flags.</span>
+        </button>
+      </div>
+
+      <div class="ctl" id="diffCtl" hidden>
+        <label>Show <select id="epA"></select></label>
+        <label>minus <select id="epB"></select></label>
+        <p>Orange appeared, blue vanished. A mover is a blue–orange pair.</p>
+      </div>
+
+      <div class="ctl" id="stackCtl" hidden>
+        <div class="padrow">
+          <canvas id="pad" width="300" height="300" title="Drag to set the motion"></canvas>
+          <div class="padside">
+            <label>East <input id="muE" type="number" step="0.1" value="0"><i>″/yr</i></label>
+            <label>North <input id="muN" type="number" step="0.1" value="0"><i>″/yr</i></label>
+            <label>Dial <select id="padRange"><option value="3">±3</option><option value="12" selected>±12</option><option value="40">±40</option></select><i>″/yr</i></label>
+            <button id="muReset" type="button">Zero</button>
+          </div>
+        </div>
+        <p>Drag the dial. When the motion matches a mover, it snaps into a sharp dot while the stars smear.</p>
+      </div>
+
+      <div class="bands">
+        <div class="bandhead"><span id="bandText"></span><button id="bandAll" hidden>Use all</button></div>
+        <div class="strip" id="bands"></div>
+        <div class="ticks" id="bandTicks"></div>
+      </div>
+
+      <div class="inspect" id="inspect">
+        <div class="empty" id="inspectEmpty">
+          <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="7"/><path d="M16 3v8M16 21v8M3 16h8M21 16h8"/></svg>
+          <p><b>Click any dot in the image.</b> You'll see whether it is a known star, and its spectrum across up to 102 infrared wavelengths.</p>
+        </div>
+        <div id="inspectBody" hidden>
+          <div class="where"><span id="whereText"></span><button id="whereCopy" title="Copy coordinates">Copy</button></div>
+          <div class="verdict" id="verdict"></div>
+          <canvas id="spec"></canvas>
+          <div class="specfoot"><span id="specNote"></span><button id="specCsv" type="button">CSV</button></div>
         </div>
       </div>
 
-      <div class="panel" id="detailPanel">
-        <h2>Details</h2>
+      <div class="frameinfo" id="frameinfo" hidden>
+        <h2>This exposure</h2>
         <dl id="details"></dl>
       </div>
     </aside>
   </main>
 
   <footer class="foot">
-    Images: NASA SPHEREx via <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" target="_blank" rel="noopener">IRSA</a>.
-    Names: <a href="https://cds.unistra.fr/" target="_blank" rel="noopener">CDS</a>.
+    Images: NASA SPHEREx and WISE, served by <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" target="_blank" rel="noopener">IRSA</a>.
+    Star catalogue: ESA <a href="https://www.cosmos.esa.int/gaia" target="_blank" rel="noopener">Gaia DR3</a>. Names: CDS.
     <span id="renderer"></span>
   </footer>
+
+  <!-- Start page -->
+  <div class="intro" id="intro" hidden>
+    <div class="introin">
+      <div class="pitch">
+        <div class="wordmark">DRIFTSCOPE</div>
+        <h1>Find what moves.</h1>
+        <p class="lead">NASA's SPHEREx telescope re-photographs the entire sky every six months, in 102 infrared colours. Stars stay put. Nearby things — asteroids, comets, brown dwarfs, perhaps an undiscovered planet — shift between passes.</p>
+        <p class="lead">Most known brown dwarfs were found by volunteers doing exactly this with an older telescope. SPHEREx is new, and almost none of its sky has been looked at by a person. <b>Pick any patch.</b></p>
+        <form id="introSearch" class="search big">
+          <input id="introQ" type="text" autocomplete="off" spellcheck="false" placeholder="Object name, or RA Dec — e.g. 08h55m10.8s -07d14m42s" aria-label="Object name or coordinates">
+          <button type="submit" class="solid">Look</button>
+        </form>
+        <button id="introRandom" class="randombig">
+          <b>Random patch of sky</b><span>Somewhere quite possibly nobody has checked</span>
+        </button>
+      </div>
+      <div class="how">
+        <div class="demo" aria-hidden="true">
+          <i style="left:14%;top:22%"></i><i style="left:71%;top:15%" class="s"></i><i style="left:38%;top:64%" class="l"></i>
+          <i style="left:83%;top:58%"></i><i style="left:22%;top:81%" class="s"></i><i style="left:58%;top:36%"></i>
+          <i style="left:9%;top:49%" class="s"></i><i style="left:64%;top:84%"></i><i style="left:46%;top:12%" class="s"></i>
+          <i class="mover"></i>
+          <span>Same patch, six months apart. One dot moved.</span>
+        </div>
+        <ol class="steps3">
+          <li><b>1</b><span><strong>Choose a spot.</strong> A name, coordinates, or a random patch — the whole sky is covered.</span></li>
+          <li><b>2</b><span><strong>Blink it.</strong> Flip between passes and watch for a dot that jumps, appears or fades.</span></li>
+          <li><b>3</b><span><strong>Check it.</strong> Click the dot: is it a known star? What does its spectrum say? Share the link.</span></li>
+        </ol>
+        <div class="practice">
+          <p>Or practise on something already known</p>
+          <div id="presets"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guide bubble -->
+  <div class="coach" id="coach" hidden>
+    <p id="coachText"></p>
+    <div><span id="coachStep"></span><button id="coachSkip">Skip</button><button id="coachNext" class="solid">Next</button></div>
+  </div>
+
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1,17 +1,29 @@
 // GET /api/search?ra=<deg>&dec=<deg>
 // Lists every SPHEREx spectral image that covers the position, across all
 // configured releases, by asking IRSA's Simple Image Access service live.
-import { COLLECTIONS, SIA_URL, IBE_PREFIX, json } from '../../lib/config.js';
+import { COLLECTIONS, SIA_URL, IBE_PREFIX, json, irsaText } from '../../lib/config.js';
 
-async function sia(collection, ra, dec) {
-  const url = `${SIA_URL}?COLLECTION=${collection}&POS=circle+${ra}+${dec}+0.003&RESPONSEFORMAT=CSV`;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const r = await fetch(url);
-    if (r.ok) return parse(await r.text(), collection);
-    if (r.status !== 503) throw new Error(`IRSA ${collection}: HTTP ${r.status}`);
-    await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+const FRESH_MS = 6 * 3600 * 1000; // how long a stored answer is used before asking IRSA again
+
+// One collection's frame list. Answers are kept in R2 so that a burst of IRSA
+// errors (it has them) falls back to the last good answer instead of failing.
+async function sia(collection, ra, dec, env) {
+  const key = `sia/v1/${collection}/${ra}_${dec}`;
+  let stored = null;
+  if (env.CACHE) {
+    const obj = await env.CACHE.get(key);
+    if (obj) stored = { at: +(obj.customMetadata?.at || 0), frames: await obj.json() };
+    if (stored && Date.now() - stored.at < FRESH_MS) return stored.frames;
   }
-  throw new Error(`IRSA ${collection}: busy`);
+  try {
+    const url = `${SIA_URL}?COLLECTION=${collection}&POS=circle+${ra}+${dec}+0.003&RESPONSEFORMAT=CSV`;
+    const frames = parse(await irsaText(url), collection);
+    if (env.CACHE) await env.CACHE.put(key, JSON.stringify(frames), { customMetadata: { at: String(Date.now()) } });
+    return frames;
+  } catch (e) {
+    if (stored) return stored.frames;
+    throw e;
+  }
 }
 
 function parse(csv, collection) {
@@ -39,12 +51,12 @@ function parse(csv, collection) {
   return out;
 }
 
-export async function onRequestGet({ request }) {
+export async function onRequestGet({ request, env }) {
   const q = new URL(request.url).searchParams;
   const ra = Number(q.get('ra')), dec = Number(q.get('dec'));
   if (!(ra >= 0 && ra < 360 && dec >= -90 && dec <= 90)) return json({ error: 'ra/dec required (degrees)' }, 400);
 
-  const results = await Promise.allSettled(COLLECTIONS.map((c) => sia(c, ra.toFixed(6), dec.toFixed(6))));
+  const results = await Promise.allSettled(COLLECTIONS.map((c) => sia(c, ra.toFixed(5), dec.toFixed(5), env)));
   const seen = new Set(), frames = [], errors = [];
   results.forEach((r, i) => {
     if (r.status !== 'fulfilled') return errors.push(String(r.reason.message || r.reason));
@@ -57,5 +69,5 @@ export async function onRequestGet({ request }) {
   });
   if (!frames.length && errors.length) return json({ error: errors.join('; ') }, 502);
   frames.sort((a, b) => a.mjd - b.mjd || a.det - b.det);
-  return json({ ra, dec, collections: COLLECTIONS, errors, frames }, 200, errors.length ? 0 : 1800);
+  return json({ ra, dec, collections: COLLECTIONS, errors, frames }, 200, errors.length ? 0 : 600);
 }

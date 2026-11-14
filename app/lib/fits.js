@@ -150,8 +150,9 @@ export function waveAt(tab, wx, wy) {
 }
 
 /** Decompress one RICE_1 tile of 32-bit integers (port of the CFITSIO algorithm). */
-export function riceDecode32(c, nx, nblock = 32) {
+export function riceDecode32(c, nx, nblock = 32, upto = nx) {
   const out = new Int32Array(nx);
+  nx = Math.min(nx, upto); // decoding is sequential, so stop once the needed columns are done
   const fsbits = 5, fsmax = 25, bbits = 32;
   let p = 0;
   let last = ((c[0] << 24) | (c[1] << 16) | (c[2] << 8) | c[3]) | 0;
@@ -192,4 +193,15 @@ export function riceDecode32(c, nx, nblock = 32) {
     }
   }
   return out;
+}
+
+/** Sky -> pixel (1-based) for an unrotated SIN-projection image such as an AllWISE atlas tile. */
+export function makeSinWcs(h) {
+  const ra0 = h.CRVAL1 * D2R, dec0 = h.CRVAL2 * D2R, s0 = Math.sin(dec0), c0 = Math.cos(dec0);
+  return (raDeg, decDeg) => {
+    const ra = raDeg * D2R, dec = decDeg * D2R, da = ra - ra0;
+    const xi = Math.cos(dec) * Math.sin(da);
+    const eta = Math.sin(dec) * c0 - Math.cos(dec) * s0 * Math.cos(da);
+    return [h.CRPIX1 + xi / D2R / h.CDELT1, h.CRPIX2 + eta / D2R / h.CDELT2];
+  };
 }

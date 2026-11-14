@@ -17,3 +17,18 @@ export const json = (obj, status = 200, maxAge = 0) =>
       'cache-control': maxAge ? `public, max-age=${maxAge}` : 'no-store',
     },
   });
+
+/** GET an IRSA URL as text, retrying while the archive answers 5xx (it does so in bursts). */
+export async function irsaText(url, tries = 6) {
+  let status = 0;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.text();
+      status = r.status;
+      if (status < 500) break;
+    } catch (e) { status = 0; }
+    await new Promise((res) => setTimeout(res, 350 + 450 * attempt));
+  }
+  throw new Error(`IRSA archive is not answering (HTTP ${status || 'network'})`);
+}

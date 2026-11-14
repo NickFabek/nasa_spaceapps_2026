@@ -71,7 +71,7 @@ async function readCompressedTile(key, dataStart, h, box, out) {
   const { bytes } = await range(key, heap + lo, heap + hi - 1);
   rows.forEach(([n, off], i) => {
     if (!n) return;
-    const row = riceDecode32(bytes.subarray(off - lo, off - lo + n), W, h.ZVAL1 || 32);
+    const row = riceDecode32(bytes.subarray(off - lo, off - lo + n), W, h.ZVAL1 || 32, xb + 1);
     const y = ya + i;
     for (let x = xa; x <= xb; x++) out[(y - y0) * T + (x - x0)] = row[x];
   });
@@ -196,7 +196,7 @@ export async function onRequestGet({ request, env, waitUntil }) {
   }
   try {
     const body = await build(key, ra, dec, half);
-    if (!body) return json({ error: 'position is not on this image' }, 404, 86400);
+    if (!body) return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } }); // nothing here
     if (env.CACHE) waitUntil(env.CACHE.put(cacheKey, body));
     return new Response(body, { headers: { ...binHeaders, 'x-cache': 'miss' } });
   } catch (e) {

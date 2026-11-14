@@ -45,12 +45,28 @@ fn tile(f: F, sky: vec2f) -> vec2f {
   // Sky offset from the target in arcsec: east is left, north is up.
   let sky = vec2f(u.res.x * 0.5 - pos.x, u.res.y * 0.5 - pos.y) * u.scale + u.center;
   var A = 0.0; var wa = 0.0; var B = 0.0; var wb = 0.0;
+  // Track the highest and lowest sample of each stack so they can be dropped:
+  // cosmic-ray hits and dead pixels are mostly unflagged, and one of them would
+  // otherwise punch through a stack of a hundred exposures.
+  var nA = 0u; var hiA = vec2f(-1e30, 0); var loA = vec2f(1e30, 0);
+  var nB = 0u; var hiB = vec2f(-1e30, 0); var loB = vec2f(1e30, 0);
   for (var i = 0u; i < u.n; i++) {
     let f = frames[i];
     let s = tile(f, sky + u.vel * f.dt);
-    A += f.wA * s.x * s.y; wa += f.wA * s.y;
-    B += f.wB * s.x * s.y; wb += f.wB * s.y;
+    if (s.y == 0) { continue; }
+    if (f.wA > 0) {
+      A += f.wA * s.x; wa += f.wA; nA++;
+      if (s.x > hiA.x) { hiA = vec2f(s.x, f.wA); }
+      if (s.x < loA.x) { loA = vec2f(s.x, f.wA); }
+    }
+    if (f.wB > 0) {
+      B += f.wB * s.x; wb += f.wB; nB++;
+      if (s.x > hiB.x) { hiB = vec2f(s.x, f.wB); }
+      if (s.x < loB.x) { loB = vec2f(s.x, f.wB); }
+    }
   }
+  if (nA >= 5u) { A -= hiA.x * hiA.y + loA.x * loA.y; wa -= hiA.y + loA.y; }
+  if (nB >= 5u) { B -= hiB.x * hiB.y + loB.x * loB.y; wb -= hiB.y + loB.y; }
   let diff = (u.flags & 1u) != 0u;
   let stripe = 0.012 * step(0.5, fract((pos.x + pos.y) / 12.0));
   let empty = vec4f(0.05 + stripe, 0.06 + stripe, 0.09 + stripe, 1);
@@ -161,6 +177,14 @@ class CpuRenderer {
     if (!this.img) { this.off = new OffscreenCanvas(N, N); this.octx = this.off.getContext('2d'); this.img = this.octx.createImageData(N, N); }
     const d = this.img.data, k = cw / N, scale = p.scale * k;
     const A = new Float32Array(N * N), wa = new Float32Array(N * N), B = new Float32Array(N * N), wb = new Float32Array(N * N);
+    // per-pixel count, highest (value, weight) and lowest (value, weight) for each stack
+    const mk = () => ({ n: new Uint16Array(N * N), hv: new Float32Array(N * N).fill(-1e30), hw: new Float32Array(N * N), lv: new Float32Array(N * N).fill(1e30), lw: new Float32Array(N * N) });
+    const eA = mk(), eB = mk();
+    const add = (sum, wsum, e, o, w, v) => {
+      sum[o] += w * v; wsum[o] += w; e.n[o]++;
+      if (v > e.hv[o]) { e.hv[o] = v; e.hw[o] = w; }
+      if (v < e.lv[o]) { e.lv[o] = v; e.lw[o] = w; }
+    };
     for (const f of p.frames) {
       const t = this.tiles[f.i];
       if (!t) continue;
@@ -185,13 +209,15 @@ class CpuRenderer {
             v = (a + (b - a) * fx) * (1 - fy) + (c + (e - c) * fx) * fy;
           }
           const o = y * N + x;
-          A[o] += f.wA * (v - f.bg); wa[o] += f.wA;
-          B[o] += f.wB * (v - f.bg); wb[o] += f.wB;
+          if (f.wA > 0) add(A, wa, eA, o, f.wA, v - f.bg);
+          if (f.wB > 0) add(B, wb, eB, o, f.wB, v - f.bg);
         }
       }
     }
     const den = Math.asinh((p.diff ? p.hi : p.hi - p.lo) / p.soft);
     for (let o = 0; o < N * N; o++) {
+      if (eA.n[o] >= 5) { A[o] -= eA.hv[o] * eA.hw[o] + eA.lv[o] * eA.lw[o]; wa[o] -= eA.hw[o] + eA.lw[o]; }
+      if (eB.n[o] >= 5) { B[o] -= eB.hv[o] * eB.hw[o] + eB.lv[o] * eB.lw[o]; wb[o] -= eB.hw[o] + eB.lw[o]; }
       let r = 14, g = 16, b = 24;
       if (wa[o] > 0 && (!p.diff || wb[o] > 0)) {
         if (p.diff) {
