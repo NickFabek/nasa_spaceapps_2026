@@ -71,6 +71,14 @@ they are new to the catalogues, not rare objects.
 **Recovered blind**: V371 Ser (EC 53), Barnard's Star (9.97″/yr; Gaia 10.39), the Miras
 OGLE GD-LPV-18622, OGLE GD-LPV-23781 and OGLE BLG-LPV-264724.
 
+**Moving-object hunt**: 608 fields at high Galactic latitude (113,844 exposures, 76,361 sources).
+Every motion flag was checked against CatWISE2020 proper motions with `tools/catwise.mjs`. Nineteen
+flags are real movers, 0.12–1.2″/yr, with speeds that agree with CatWISE and Gaia; all nineteen are
+stars Gaia already lists. Control fields recovered Teegarden's Star (5.17″/yr; Gaia 5.12) and
+Epsilon Indi (4.65; 4.68). No uncatalogued moving object was found. About 200 other flags were false:
+faint sources whose position is poorly known at SPHEREx's 6″ pixels, and a few "sources" made of
+unrelated cosmic-ray hits on one spot. The scan now rejects both kinds.
+
 **Rejected**: two Lupus III sources (diffraction light from bright neighbours) and
 2MASS J20161735+3712567 (real change, but already in the Petrosky+ 2021 WISE variables catalogue).
 These rejections shaped the scan's rules: ignore sources beside far brighter ones, require a stable
