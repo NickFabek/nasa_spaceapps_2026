@@ -42,22 +42,40 @@ const result = JSON.parse(await document.modelContext.executeTool(look, { target
 To enable native WebMCP on the deployed site, register the origin for Chrome's WebMCP origin trial
 and add the token as `<meta http-equiv="origin-trial" content="…">` in `app/pages/index.html`.
 
-## What a scan has found
+## What scans have found
 
-An AI agent drove the tool over 28 fields (10,691 exposures: 16 star-forming regions and 12
-inner-Galaxy fields) and checked every flagged source against SIMBAD, Gaia DR3, 2MASS and AllWISE.
+An AI agent drove the tool through its WebMCP tools over about 175 fields (star-forming regions and
+the northern Galactic plane) and checked every flagged source against SIMBAD, the AAVSO Variable
+Star Index (VSX), Gaia DR3 and its variability tables, 2MASS, AllWISE, and the ZTF and WISE
+variable-star catalogues.
 
-- **IRAS 18274−0205** (Serpens South protostar): 232 mJy at 4.7 µm in Sep 2025, unsaturated in all
-  23 exposures; saturating by 2026. Unsaturated bands rose across three passes (2 µm: 4 → 10 → 15
-  mJy; 3 µm: 14 → 60 → 87 mJy). In Sep 2025 it was several times fainter than 2MASS (1999) or WISE (2010).
-- **V371 Ser / EC 53** (known eruptive protostar): 74% fainter in Sep 2026 than Sep 2025.
-- **IRAS 16253−2429** (Ophiuchus protostar): 56% fainter in Aug 2026 than Aug 2025.
-- **2MASS J03290907+3121291** (NGC 1333): 77% brighter in Aug 2026 than Aug 2025.
-- **Barnard's Star**: recovered blind at 9.97″/yr (Gaia: 10.39).
+**New variable-star candidates** (real change in SPHEREx data, no variability on record in any of
+the above; independent confirmation still needed):
 
-All are catalogued objects; no uncatalogued object has been found. Two candidates in Lupus III were
-rejected as diffraction light from bright neighbours, which led to the scan's current rejection rules.
-Unpaired "appeared since 2010" detections are not reported because nebulosity produces false ones.
+- **2MASS J20355040+4349233** (RA 308.95999, Dec +43.82317). Very red (J−K = 4.2), no SIMBAD entry,
+  no Gaia counterpart. At matched wavelengths it dimmed 13–24% in five bands between Jun 2025 and
+  Jun 2026 (most of it by Oct 2025). Twelve other stars in the field changed by 0 to −3%.
+- **Gaia DR3 2054043683842071424** (RA 303.11985, Dec +31.78993). Known only as an Hα-excess source
+  (Fratta+ 2021). Below 1.1 µm it is unchanged, in agreement with ZTF photometry, which is flat from
+  2018 to Oct 2025. Its infrared excess grew from May 2025 to May 2026: +23% at 1.4 µm, +32% at 2 µm,
+  +59% at 4.1 µm, +77% at 4.7 µm, consistent with a circumstellar disk building up.
+
+**Known objects caught changing**
+
+- **[HMH2007] 67** (Serpens G3–G6 protostar): 433 mJy at 4.7 µm in Sep 2025, about 120 mJy in Apr
+  and Sep 2026.
+- **IRAS 18274−0205** (Serpens South protostar): 232 mJy at 4.7 µm in Sep 2025, saturating by 2026;
+  2 µm rose 4 → 10 → 15 mJy across three passes.
+- **IRAS 16253−2429**, **2MASS J03290907+3121291**, **IRAS 15398−3359** and other young stars:
+  20–77% changes between same-season passes.
+
+**Recovered blind**: V371 Ser (EC 53), Barnard's Star (9.97″/yr; Gaia 10.39), the Miras
+OGLE GD-LPV-18622, OGLE GD-LPV-23781 and OGLE BLG-LPV-264724.
+
+**Rejected**: two Lupus III sources (diffraction light from bright neighbours) and
+2MASS J20161735+3712567 (real change, but already in the Petrosky+ 2021 WISE variables catalogue).
+These rejections shaped the scan's rules: ignore sources beside far brighter ones, require a stable
+position, and prefer comparisons between passes a whole year apart.
 
 ## How it works
 
