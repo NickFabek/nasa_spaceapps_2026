@@ -105,6 +105,9 @@ export function scanField(S) {
   if (!spx.length) return { sources: [], summary: { sources: 0 } };
   const N = Math.round((S.fov * 60) / GRID) | 1, c = (N - 1) / 2;
   const all = stack(spx, N, S.mask);
+  // WISE saw 3.4 and 4.6 µm, so positions are compared against a stack of the SPHEREx bands nearest to that.
+  const redFrames = spx.filter((f) => f.det >= 4);
+  const red = redFrames.length >= 10 ? stack(redFrames, N, S.mask) : all;
   const perPass = passes.map((e) => stack(spx.filter((f) => f.epoch === e.i), N, S.mask));
   const wimg = wise.length ? stack(wise, N, 0) : null;
   const wiseMjd = wise.length ? wise[0].mjd : 0;
@@ -131,6 +134,8 @@ export function scanField(S) {
   const yearsToWise = (S.tRef - wiseMjd) / 365.25;
   const gaiaAt = (g, mjd) => { const yr = (mjd - 57388.5) / 365.25; return [g.e0 + g.pe * yr, g.n0 + g.pn * yr]; };
   const wsig = wimg ? mad(Array.from(wimg).filter((v) => v === v)) || 1 : 1;
+  const rvals = Array.from(red).filter((v) => v === v), rbg = median(rvals), rsig = mad(rvals, rbg) || 1;
+  const finiteAt = (img, e, n) => { const v = img[Math.round(c - n / GRID) * N + Math.round(c - e / GRID)]; return v === v; };
 
   for (const s of found) {
     s.ra = S.ra + s.e / 3600 / cosd; s.dec = S.dec + s.n / 3600;
@@ -144,9 +149,11 @@ export function scanField(S) {
     s.gaia = best; s.gaiaNear = near;
 
     // position in 2010 (WISE) and in each SPHEREx pass
-    if (wimg) {
-      const p = peakNear(wimg, N, s.e, s.n, 15, 6 * wsig);
-      if (p) { const w = centroid(wimg, N, p.i, p.j); if (w) s.wise = { e: w[0], n: w[1], snr: p.v / wsig }; }
+    const rp = peakNear(red, N, s.e, s.n, 6, rbg + 6 * rsig);
+    if (rp) { const q = centroid(red, N, rp.i, rp.j); if (q) s.red = { e: q[0], n: q[1], v: rp.v - rbg, snr: (rp.v - rbg) / rsig }; }
+    if (wimg && s.red) {
+      const p = peakNear(wimg, N, s.red.e, s.red.n, 12, 6 * wsig);
+      if (p) { const w = centroid(wimg, N, p.i, p.j); if (w) s.wise = { e: w[0], n: w[1], v: p.v, snr: p.v / wsig }; }
     }
     s.pass = perPass.map((img) => {
       const p = peakNear(img, N, s.e, s.n, 9, bg + 6 * sigma);
@@ -196,24 +203,23 @@ export function scanField(S) {
   if (wimg) {
     for (let j = 3; j < N - 3; j++) for (let i = 3; i < N - 3; i++) {
       const v = wimg[j * N + i];
-      if (!(v > 20 * sigma && v > 12 * wsig)) continue; // bright enough that SPHEREx would have seen it
+      if (!(v > 20 * rsig && v > 12 * wsig)) continue; // bright enough that SPHEREx would have seen it
       let top = true;
       for (let b = -1; b <= 1 && top; b++) for (let a = -1; a <= 1; a++) if ((a || b) && wimg[(j + b) * N + i + a] > v) { top = false; break; }
       if (!top) continue;
       const pos = centroid(wimg, N, i, j);
       if (!pos || gone.some((g) => Math.hypot(g.e - pos[0], g.n - pos[1]) < 10)) continue;
       if (found.some((t) => Math.hypot(t.e - pos[0], t.n - pos[1]) < 15)) continue;
-      const here = peakNear(all, N, pos[0], pos[1], 9, bg + 5 * sigma);
-      if (here || !(all[j * N + i] === all[j * N + i])) continue; // SPHEREx sees something there, or has no data there
+      if (!finiteAt(red, pos[0], pos[1]) || peakNear(all, N, pos[0], pos[1], 9, bg + 5 * sigma) || peakNear(red, N, pos[0], pos[1], 9, rbg + 5 * rsig)) continue; // SPHEREx has no data there, or sees something
       gone.push({ e: pos[0], n: pos[1], v });
     }
   }
 
   // Tie WISE and SPHEREx astrometry together using stars Gaia says are slow, and measure the scatter.
-  const still = found.filter((s) => s.wise && s.gaia && s.gaia.pm < 0.03 && !s.saturated && s.gaiaNear <= 1);
-  const ref = still.length >= 4 ? still : found.filter((s) => s.wise && !s.saturated);
-  const offE = median(ref.map((s) => s.e - s.wise.e)) || 0, offN = median(ref.map((s) => s.n - s.wise.n)) || 0;
-  const resid = ref.map((s) => Math.hypot(s.e - s.wise.e - offE, s.n - s.wise.n - offN));
+  const still = found.filter((s) => s.wise && s.red && s.gaia && s.gaia.pm < 0.03 && !s.saturated && s.gaiaNear <= 1);
+  const ref = still.length >= 4 ? still : found.filter((s) => s.wise && s.red && !s.saturated);
+  const offE = median(ref.map((s) => s.red.e - s.wise.e)) || 0, offN = median(ref.map((s) => s.red.n - s.wise.n)) || 0;
+  const resid = ref.map((s) => Math.hypot(s.red.e - s.wise.e - offE, s.red.n - s.wise.n - offN));
   const scatter = Math.max(0.6, 1.4826 * (median(resid) || 1)); // arcsec, typical per-source position error
 
   // Ordinary pass-to-pass changes of the whole field (calibration drift) are removed before judging any one source.
@@ -224,10 +230,13 @@ export function scanField(S) {
     s.kinds = [];
     s.moved = null;
     if (s.wise && yearsToWise > 5) {
-      const de = s.e - s.wise.e - offE, dn = s.n - s.wise.n - offN, d = Math.hypot(de, dn);
-      s.moved = { arcsec: d, perYear: d / yearsToWise, east: de / yearsToWise, north: dn / yearsToWise, sigma: d / scatter, years: yearsToWise };
-      if (d > Math.max(3, 5 * scatter) && !s.saturated && s.gaiaNear <= 1 && s.snr >= 15 && s.wise.snr >= 10) s.kinds.push('moved');
-    } else if (wimg && yearsToWise > 5 && s.snr >= 30 && !peakNear(wimg, N, s.e, s.n, 15, 5 * wsig)) {
+      const de = s.red.e - s.wise.e - offE, dn = s.red.n - s.wise.n - offN, d = Math.hypot(de, dn);
+      const ratio = s.wise.v / s.red.v; // WISE was scaled to SPHEREx brightness, so the same object gives about 1
+      s.moved = { arcsec: d, perYear: d / yearsToWise, east: de / yearsToWise, north: dn / yearsToWise, sigma: d / scatter, years: yearsToWise, brightnessRatio: ratio };
+      // Gaia measures motion far better than this can; a Gaia star it calls slow has not moved, whatever the centroids say.
+      const gaiaSlow = s.gaia && s.gaia.pm < 0.1;
+      if (d > Math.max(3, 5 * scatter) && !s.saturated && s.gaiaNear <= 1 && s.red.snr >= 15 && s.wise.snr >= 10 && ratio > 0.33 && ratio < 3 && !gaiaSlow) s.kinds.push('moved');
+    } else if (wimg && yearsToWise > 5 && s.red && s.red.snr >= 30 && finiteAt(wimg, s.red.e, s.red.n) && !peakNear(wimg, N, s.red.e, s.red.n, 15, 5 * wsig)) {
       // nothing here in 2010: pair it with the nearest source that has since gone
       let g = null, gd = 600;
       for (const c of gone) { const d = Math.hypot(c.e - s.e, c.n - s.n); if (!c.used && d < gd) { gd = d; g = c; } }
@@ -242,7 +251,7 @@ export function scanField(S) {
       const dev = Math.log(s.change.ratio) - fieldMed;
       s.change.percent = (Math.exp(dev) - 1) * 100;
       s.change.fieldSigma = Math.abs(dev) / fieldSd;
-      if (Math.abs(dev) > 0.18 && s.change.z > 6 && s.change.fieldSigma > 4 && !s.saturated) s.kinds.push('changed');
+      if (Math.abs(dev) > 0.18 && s.change.z > 6 && s.change.fieldSigma > 4 && !s.saturated && s.snr >= 20 && s.gaiaNear <= 2) s.kinds.push('changed');
     }
     if (!s.gaia && S.gaia) s.kinds.push('unlisted');
     // rank: unexplained things first
