@@ -163,22 +163,23 @@ class GpuRenderer {
   }
 }
 
-// Same compositing on the CPU, drawn at reduced resolution and scaled up by CSS.
+// Same compositing on the CPU, drawn at reduced resolution and scaled up.
 class CpuRenderer {
   kind = 'canvas';
   constructor(canvas, T) {
     this.canvas = canvas; this.T = T; this.tiles = [];
     this.ctx = canvas.getContext('2d');
-    this.N = 280;
   }
+  destroy() { this.tiles = []; }
   setTile(i, data) { this.tiles[i] = data; }
   draw(p) {
-    const { N, T } = this, cw = this.canvas.width;
-    if (!this.img) { this.off = new OffscreenCanvas(N, N); this.octx = this.off.getContext('2d'); this.img = this.octx.createImageData(N, N); }
-    const d = this.img.data, k = cw / N, scale = p.scale * k;
-    const A = new Float32Array(N * N), wa = new Float32Array(N * N), B = new Float32Array(N * N), wb = new Float32Array(N * N);
+    const T = this.T, cw = this.canvas.width, ch = this.canvas.height;
+    const N = 300, M = Math.max(1, Math.round((N * ch) / cw));
+    if (!this.img || this.img.height !== M) { this.off = new OffscreenCanvas(N, M); this.octx = this.off.getContext('2d'); this.img = this.octx.createImageData(N, M); }
+    const d = this.img.data, scale = p.scale * (cw / N), n = N * M;
+    const A = new Float32Array(n), wa = new Float32Array(n), B = new Float32Array(n), wb = new Float32Array(n);
     // per-pixel count, highest (value, weight) and lowest (value, weight) for each stack
-    const mk = () => ({ n: new Uint16Array(N * N), hv: new Float32Array(N * N).fill(-1e30), hw: new Float32Array(N * N), lv: new Float32Array(N * N).fill(1e30), lw: new Float32Array(N * N) });
+    const mk = () => ({ n: new Uint16Array(n), hv: new Float32Array(n).fill(-1e30), hw: new Float32Array(n), lv: new Float32Array(n).fill(1e30), lw: new Float32Array(n) });
     const eA = mk(), eB = mk();
     const add = (sum, wsum, e, o, w, v) => {
       sum[o] += w * v; wsum[o] += w; e.n[o]++;
@@ -189,8 +190,8 @@ class CpuRenderer {
       const t = this.tiles[f.i];
       if (!t) continue;
       const [j0, j1, j2, j3] = f.J;
-      for (let y = 0; y < N; y++) {
-        const sy = (N / 2 - (y + 0.5)) * scale + p.center[1] + p.vel[1] * f.dt;
+      for (let y = 0; y < M; y++) {
+        const sy = (M / 2 - (y + 0.5)) * scale + p.center[1] + p.vel[1] * f.dt;
         for (let x = 0; x < N; x++) {
           const sx = (N / 2 - (x + 0.5)) * scale + p.center[0] + p.vel[0] * f.dt;
           const px = f.px + j0 * sx + j1 * sy, py = f.py + j2 * sx + j3 * sy;
@@ -215,7 +216,7 @@ class CpuRenderer {
       }
     }
     const den = Math.asinh((p.diff ? p.hi : p.hi - p.lo) / p.soft);
-    for (let o = 0; o < N * N; o++) {
+    for (let o = 0; o < n; o++) {
       if (eA.n[o] >= 5) { A[o] -= eA.hv[o] * eA.hw[o] + eA.lv[o] * eA.lw[o]; wa[o] -= eA.hw[o] + eA.lw[o]; }
       if (eB.n[o] >= 5) { B[o] -= eB.hv[o] * eB.hw[o] + eB.lv[o] * eB.lw[o]; wb[o] -= eB.hw[o] + eB.lw[o]; }
       let r = 14, g = 16, b = 24;
@@ -237,7 +238,7 @@ class CpuRenderer {
     }
     this.octx.putImageData(this.img, 0, 0);
     this.ctx.imageSmoothingEnabled = !p.nearest;
-    this.ctx.drawImage(this.off, 0, 0, cw, this.canvas.height);
+    this.ctx.drawImage(this.off, 0, 0, cw, ch);
   }
 }
 

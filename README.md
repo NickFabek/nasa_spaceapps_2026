@@ -1,4 +1,4 @@
-# Driftscope
+# Spherical
 
 NASA Space Apps 2026 — *Planet X and SPHEREx*. A public web tool for finding things that move
 or change in NASA SPHEREx infrared images of any patch of sky.

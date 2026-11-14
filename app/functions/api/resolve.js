@@ -7,11 +7,17 @@ import { json } from '../../lib/config.js';
 export async function onRequestGet({ request }) {
   const name = (new URL(request.url).searchParams.get('name') || '').trim();
   if (!name || name.length > 80) return json({ error: 'name required' }, 400);
-  const r = await fetch(`https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?${encodeURIComponent(name)}`);
-  if (!r.ok) return json({ error: `resolver HTTP ${r.status}` }, 502);
-  const text = await r.text();
+  // CDS Sesame, then its mirror at Harvard: either can be down for hours.
+  let text = '';
+  for (const host of ['https://cds.unistra.fr/cgi-bin', 'https://vizier.cfa.harvard.edu/viz-bin']) {
+    try {
+      const r = await fetch(`${host}/nph-sesame/-oI/SNV?${encodeURIComponent(name)}`, { redirect: 'manual' });
+      if (r.ok) { text = await r.text(); if (/^%J/m.test(text) || /Nothing found/i.test(text)) break; }
+    } catch (e) { /* try the mirror */ }
+  }
+  if (!text) return json({ error: 'The name service is not answering' }, 502);
   const j = /^%J\s+([\d.+-]+)\s+([\d.+-]+)/m.exec(text);
-  if (!j) return json({ error: `"${name}" was not recognised` }, 404, 3600);
+  if (!j) return json({ error: `"${name}" was not recognised` }, 404, 300);
   let ra = +j[1], dec = +j[2];
   const p = /^%P\s+([\d.+-]+)\s+([\d.+-]+)/m.exec(text);
   let pm = null;

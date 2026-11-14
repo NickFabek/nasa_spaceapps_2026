@@ -1,5 +1,8 @@
 import { createRenderer, SENTINEL } from './gpu.js';
 import { parseCoords, fmtRa, fmtDec, fmtDate, fmtMonth } from './coords.js';
+import { scanField, describe, aperture } from './scan.js';
+import { registerTools } from './mcp.js';
+import { FOUND, FOUND_NOTE } from './found.js';
 
 const $ = (id) => document.getElementById(id);
 const PIX = 6.15; // SPHEREx pixel scale, arcsec
@@ -50,16 +53,23 @@ const PRESETS = [
   { name: 'RW Aurigae', why: 'A young star that flickers unpredictably', ra: 76.95659, dec: 30.40129, fov: 6 },
 ];
 
+const HINTS = {
+  epoch: 'One image per telescope pass. Press play: anything that moved between passes will jump.',
+  diff: 'One pass minus another. What stayed put cancels out; orange appeared, blue vanished.',
+  stack: 'Every exposure added along a motion you set. A faint mover sharpens into a dot when the motion matches.',
+  frame: 'Every single exposure in time order, with its wavelength and quality flags.',
+};
+
 const S = {
   gen: 0, partial: false, ra: 0, dec: 0, fov: 6, name: '', frames: [], epochs: [], T: 0, renderer: null, loaded: false,
   bands: new Set([1, 2, 3, 4, 5, 6]), mode: 'epoch', cur: 0, epA: 0, epB: 0,
   vel: [0, 0], padRange: 12, stretch: 2.6, invert: false, nearest: false, showGaia: true, wise: true,
   mask: FLAGS.filter((f) => f[3]).reduce((m, f) => m | (1 << f[0]), OFF_DETECTOR),
   view: 360, center: [0, 0], tRef: 0, viewMjd: 0, playing: false, click: null, spectrum: [], gaia: null,
-  activeA: new Set(), activeB: new Set(), curFrame: null, randomTries: 0,
+  activeA: new Set(), activeB: new Set(), curFrame: null, randomTries: 0, scan: null, hit: null,
 };
 const params = new URLSearchParams(location.search);
-window.driftscope = S; // handy in the console
+window.spherical = S; // handy in the console
 const FORCE_CPU = params.get('cpu') === '1';
 const cosDec = () => Math.cos(S.dec * Math.PI / 180);
 
@@ -68,11 +78,12 @@ const cosDec = () => Math.cos(S.dec * Math.PI / 180);
 async function go(ra, dec, name = '', random = false) {
   const gen = ++S.gen;
   if (!random) S.randomTries = 0;
-  Object.assign(S, { ra, dec, name, frames: [], epochs: [], cur: 0, curEp: -1, epUser: false, click: null, spectrum: [], gaia: null, loaded: false, center: [0, 0], view: S.fov * 60, curFrame: null });
+  Object.assign(S, { ra, dec, name, frames: [], epochs: [], cur: 0, curEp: -1, epUser: false, click: null, spectrum: [], gaia: null, loaded: false, scan: null, hit: null, center: [0, 0], view: S.fov * 60, curFrame: null });
+  if (S.pendingAt) { S.click = S.pendingAt; S.pendingAt = null; }
   stopPlay();
   $('intro').hidden = true;
   $('q').value = name || `${ra.toFixed(5)} ${dec.toFixed(5)}`;
-  syncUrl(); renderInspect(); updateProgress(); drawTimeline(); requestDraw();
+  syncUrl(); renderInspect(); renderHits(); updateProgress(); drawTimeline(); requestDraw();
   setStatus('Searching the SPHEREx archive…');
 
   // NASA's archive index sometimes refuses requests for a minute at a time, so be patient.
@@ -131,7 +142,8 @@ async function go(ra, dec, name = '', random = false) {
   await Promise.all(Array.from({ length: 16 }, worker));
   if (gen !== S.gen) return;
   S.loaded = true;
-  matchWise(); updateProgress(); requestDraw();
+  matchWise(); updateProgress();
+  runScan();
   if (S.click) computeSpectrum();
 }
 
@@ -168,7 +180,7 @@ async function loadFrame(f, half, gen) {
     f.sig = Math.max(1e-6, 1.4826 * dev[dev.length >> 1]);
     f.p99 = Math.max(f.sig, vals[Math.floor(vals.length * 0.995)] - f.bg);
     f.state = 'ok';
-    if (f.src === 'WISE') { f.raw = f.img; f.rawStats = [f.bg, f.sig, f.p99]; matchWise(); } else uploadTile(f);
+    if (f.src === 'WISE') { f.raw = f.img; f.rawStats = [f.bg, f.sig, f.p99]; matchWise(); if (S.loaded) setTimeout(runScan, 0); } else uploadTile(f);
   } catch (e) {
     f.state = 'fail';
     f.error = String(e.message || e);
@@ -225,10 +237,11 @@ async function loadGaia(gen) {
       let dra = s.ra - S.ra;
       if (dra > 180) dra -= 360; if (dra < -180) dra += 360;
       const pe = (s.pmra || 0) / 1000, pn = (s.pmdec || 0) / 1000;
-      return { ...s, e0: dra * cosDec() * 3600, n0: (s.dec - S.dec) * 3600, pe, pn, pm: Math.hypot(pe, pn) };
+      return { ...s, var: s.var === true, e0: dra * cosDec() * 3600, n0: (s.dec - S.dec) * 3600, pe, pn, pm: Math.hypot(pe, pn) };
     });
     requestDraw();
     if (S.click) renderInspect();
+    if (S.loaded) runScan();
   } catch (e) { /* the overlay is optional */ }
 }
 // Offset of a Gaia star from the field centre (arcsec east, north) on a given date.
@@ -321,14 +334,14 @@ function draw() {
 }
 
 // sky offset (arcsec east, north) <-> CSS pixel in the stage
-const cssSize = () => $('stage').clientWidth;
-const skyToCss = ([e, n]) => { const s = S.view / cssSize(); return [cssSize() / 2 - (e - S.center[0]) / s, cssSize() / 2 - (n - S.center[1]) / s]; };
-const cssToSky = ([x, y]) => { const s = S.view / cssSize(); return [(cssSize() / 2 - x) * s + S.center[0], (cssSize() / 2 - y) * s + S.center[1]]; };
+const cssW = () => $('stage').clientWidth, cssH = () => $('stage').clientHeight;
+const skyToCss = ([e, n]) => { const s = S.view / cssW(); return [cssW() / 2 - (e - S.center[0]) / s, cssH() / 2 - (n - S.center[1]) / s]; };
+const cssToSky = ([x, y]) => { const s = S.view / cssW(); return [(cssW() / 2 - x) * s + S.center[0], (cssH() / 2 - y) * s + S.center[1]]; };
 
 function drawOverlay() {
-  const cv = $('overlay'), ctx = cv.getContext('2d'), W = cssSize(), dpr = cv.width / W;
+  const cv = $('overlay'), ctx = cv.getContext('2d'), W = cssW(), H = cssH(), dpr = cv.width / W;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, W);
+  ctx.clearRect(0, 0, W, H);
   if (!S.frames.length) return;
   const s = S.view / W, ink = S.invert && S.mode !== 'diff' ? '#111' : BONE;
   ctx.font = `11.5px ${MONO}`; ctx.textBaseline = 'middle';
@@ -339,9 +352,9 @@ function drawOverlay() {
     let drawn = 0;
     ctx.strokeStyle = ctx.fillStyle = S.invert && S.mode !== 'diff' ? '#0a7fb8' : GAIA;
     for (const st of S.gaia) { // brightest first; crowded fields only get their brightest stars ringed
-      if (st.g > 18 || drawn >= 140) break;
+      if (st.g > 18 || drawn >= 160) break;
       const [x, y] = skyToCss(gaiaAt(st, S.viewMjd));
-      if (x < -r || y < -r || x > W + r || y > W + r) continue;
+      if (x < -r || y < -r || x > W + r || y > H + r) continue;
       drawn++;
       const fast = st.pm > 0.15;
       ctx.globalAlpha = fast ? 1 : Math.min(0.8, Math.max(0.35, (19 - st.g) / 8));
@@ -350,6 +363,21 @@ function drawOverlay() {
       if (fast) { ctx.textAlign = 'left'; ctx.fillText(`${st.pm.toFixed(1)}″/yr`, x + r + 5, y); }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // sources the field scan flagged: corner brackets, orange for movers, yellow for brightness changes
+  if (S.scan) {
+    ctx.lineWidth = 1.5;
+    for (const h of S.scan.sources) {
+      const kind = ['moved', 'appeared', 'gone', 'changed'].find((k) => h.kinds.includes(k));
+      if (!kind) continue;
+      const [x, y] = skyToCss([h.e, h.n]), r = Math.min(22, Math.max(10, (PIX * 1.6) / s)), q = r * 0.45;
+      if (x < -r || y < -r || x > W + r || y > H + r) continue;
+      ctx.strokeStyle = kind === 'changed' ? '#f5d547' : SIGNAL;
+      ctx.beginPath();
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(x + a * r, y + b * (r - q)); ctx.lineTo(x + a * r, y + b * r); ctx.lineTo(x + a * (r - q), y + b * r); }
+      ctx.stroke();
+    }
   }
 
   // the requested position
@@ -364,7 +392,7 @@ function drawOverlay() {
   if (S.mode === 'stack' && (S.vel[0] || S.vel[1])) {
     const spx = S.frames.filter((f) => f.src === 'SPX'), yrs = (spx.at(-1).mjd - spx[0].mjd) / 365.25;
     const dx = (-S.vel[0] * yrs) / s, dy = (-S.vel[1] * yrs) / s, len = Math.hypot(dx, dy);
-    const ox = W - 44, oy = 44, k = Math.min(1, 30 / (len / 2 || 1));
+    const ox = W - 56, oy = 46, k = Math.min(1, 30 / (len / 2 || 1));
     const a = [ox - (dx / 2) * k, oy - (dy / 2) * k], b = [ox + (dx / 2) * k, oy + (dy / 2) * k];
     ctx.strokeStyle = ctx.fillStyle = SIGNAL; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
@@ -372,7 +400,7 @@ function drawOverlay() {
     ctx.beginPath(); ctx.moveTo(b[0] + 6 * Math.cos(ang), b[1] + 6 * Math.sin(ang));
     ctx.lineTo(b[0] - 7 * Math.cos(ang - 0.5), b[1] - 7 * Math.sin(ang - 0.5));
     ctx.lineTo(b[0] - 7 * Math.cos(ang + 0.5), b[1] - 7 * Math.sin(ang + 0.5)); ctx.fill();
-    ctx.textAlign = 'center'; ctx.fillText(`${(Math.hypot(...S.vel) * yrs).toFixed(0)}″ in ${yrs.toFixed(1)} yr`, Math.min(ox, W - 62), oy + 44);
+    ctx.textAlign = 'center'; ctx.fillText(`${(Math.hypot(...S.vel) * yrs).toFixed(0)}″ in ${yrs.toFixed(1)} yr`, ox, oy + 44);
   }
 
   // the spot being inspected
@@ -384,11 +412,11 @@ function drawOverlay() {
 
   // compass and scale
   ctx.strokeStyle = ctx.fillStyle = ink; ctx.lineWidth = 1.5; ctx.textAlign = 'center';
-  const cx = W - 30, cy = W - 30;
+  const cx = W - 30, cy = H - 30;
   ctx.beginPath(); ctx.moveTo(cx, cy - 22); ctx.lineTo(cx, cy); ctx.lineTo(cx - 22, cy); ctx.stroke();
   ctx.fillText('N', cx, cy - 31); ctx.fillText('E', cx - 31, cy);
-  const bar = [600, 300, 120, 60, 30, 10, 5].find((b) => b / s < W * 0.28) || 5;
-  const bw = bar / s, bx = W - 74 - bw, by = W - 22;
+  const bar = [600, 300, 120, 60, 30, 10, 5].find((b) => b / s < W * 0.22) || 5;
+  const bw = bar / s, bx = W - 74 - bw, by = H - 22;
   ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by - 4); ctx.stroke();
   ctx.fillText(bar >= 60 ? `${bar / 60} arcmin` : `${bar} arcsec`, bx + bw / 2, by - 12);
 }
@@ -416,13 +444,13 @@ function drawTimeline() {
     const seg = { e, x0: x, x1: x + w, frames: [] };
     const isA = S.frames.some((f) => f.epoch === e.i && S.activeA.has(f.idx)), isB = S.frames.some((f) => f.epoch === e.i && S.activeB.has(f.idx));
     const grouped = S.mode === 'epoch' || S.mode === 'diff';
-    if (grouped && (isA || isB)) { ctx.fillStyle = isA ? SIGNAL : '#4d9dff'; ctx.fillRect(x, H - 21, w, 2); }
+    if (grouped && (isA || isB)) { ctx.fillStyle = isA ? SIGNAL : '#4d9dff'; ctx.fillRect(x, H - 20, w, 2); }
     ctx.fillStyle = grouped && (isA || isB) ? BONE : DIM;
     ctx.fillText(e.src === 'WISE' ? 'WISE' : e.label.toUpperCase(), x + w / 2, H - 6);
     for (const f of S.frames) {
       if (f.epoch !== e.i) continue;
       const fx = e.src === 'WISE' ? x + w / 2 + (f.band === 1 ? -7 : 7) : e.t1 > e.t0 ? x + 4 + (w - 8) * ((f.mjd - e.t0) / (e.t1 - e.t0)) : x + w / 2;
-      const fy = 9 + (f.det - 1) * 9;
+      const fy = 7 + (f.det - 1) * 8;
       const on = S.activeA.has(f.idx) || S.activeB.has(f.idx);
       ctx.fillStyle = ctx.strokeStyle = f.state === 'fail' ? '#444' : DET[f.det].color;
       ctx.globalAlpha = on ? 1 : S.bands.has(f.det) ? 0.5 : 0.16;
@@ -437,7 +465,7 @@ function drawTimeline() {
   if (S.mode === 'frame' && S.curFrame) {
     for (const seg of tlLayout) for (const p of seg.frames) if (p.f === S.curFrame) {
       ctx.strokeStyle = BONE; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(p.fx, 3); ctx.lineTo(p.fx, H - 24); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.fx, 2); ctx.lineTo(p.fx, H - 22); ctx.stroke();
     }
   }
 }
@@ -467,39 +495,55 @@ function timelineClick(ev) {
   requestDraw();
 }
 
+// ---------- whole-field scan ----------
+
+function runScan() {
+  if (!S.loaded) return;
+  try { S.scan = scanField({ ...S, suspect: SUSPECT }); } catch (e) { console.warn('scan failed', e); S.scan = null; }
+  renderHits(); requestDraw();
+}
+
+const hitList = () => (S.scan ? S.scan.sources.filter((h) => h.kinds.length) : []);
+function renderHits() {
+  const sc = S.scan, list = hitList().slice(0, 40);
+  const flagged = sc ? sc.summary.moved + sc.summary.changed + sc.summary.appeared + sc.summary.gone : 0;
+  $('fieldCount').textContent = flagged || '';
+  if (!sc) { $('fieldNote').textContent = S.frames.length ? 'Checking every source once the images have loaded…' : 'Every source in the field is checked once the images have loaded.'; $('hits').innerHTML = ''; return; }
+  const m = sc.summary;
+  $('fieldNote').textContent = `${m.sources} sources checked: ${m.moved} moved since 2010, ${m.appeared + m.gone} appeared or vanished, ${m.changed} changed brightness, ${m.unlisted} not in Gaia.`
+    + (m.hasWise ? '' : ' The 2010 image did not load, so motion was not checked.');
+  const label = { moved: 'Moved', appeared: 'New', gone: 'Gone', changed: 'Changed', unlisted: 'Not listed' };
+  $('hits').innerHTML = list.map((h, i) => {
+    const kind = ['moved', 'appeared', 'gone', 'changed', 'unlisted'].find((k) => h.kinds.includes(k));
+    return `<li><button data-i="${i}" class="${S.hit === h ? 'on' : ''}"><i class="${kind}">${label[kind]}</i><span><b>${fmtRa(h.ra)} ${fmtDec(h.dec)}</b>${describe(h) || 'no Gaia star within 8″'}</span></button></li>`;
+  }).join('');
+}
+
+function selectSky(e, n, recenter = false) {
+  S.click = [e, n]; syncUrl();
+  if (recenter) { S.center = [e, n]; S.view = Math.min(S.view, 180); }
+  renderInspect(); computeSpectrum(); requestDraw();
+}
+
+function setTab(tab) {
+  for (const b of $('ptabs').children) b.setAttribute('aria-selected', b.dataset.tab === tab);
+  $('tabSpot').hidden = tab !== 'spot'; $('tabField').hidden = tab !== 'field';
+  if (tab === 'spot') drawSpectrum();
+}
+
 // ---------- inspecting one spot: identity + spectrum ----------
 
 function photometry(f, sky) {
-  const { px, py, J, T } = f.meta;
+  const { px, py, J } = f.meta;
   const dt = f.mjd - S.tRef, v = S.mode === 'stack' ? [S.vel[0] / 365.25, S.vel[1] / 365.25] : [0, 0];
   const sx = sky[0] + v[0] * dt, sy = sky[1] + v[1] * dt;
   const x = px + J[0] * sx + J[1] * sy, y = py + J[2] * sx + J[3] * sy;
-  const R = 2, R1 = 4, R2 = 7;
-  if (x < R2 || y < R2 || x > T - 1 - R2 || y > T - 1 - R2) return null;
-  const ann = [];
-  let sum = 0, w2 = 0, area = 0, flags = 0, nan = false;
-  for (let j = Math.floor(y - R2); j <= Math.ceil(y + R2); j++)
-    for (let i = Math.floor(x - R2); i <= Math.ceil(x + R2); i++) {
-      const d = Math.hypot(i - x, j - y), o = j * T + i, val = f.img[o];
-      if (d >= R1 && d <= R2) { if (Number.isFinite(val) && !(f.flags[o] & S.mask)) ann.push(val); continue; }
-      if (d > R + 0.75) continue;
-      let w = 0;
-      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) if (Math.hypot(i + (a - 1) / 3 - x, j + (b - 1) / 3 - y) <= R) w += 1 / 9;
-      if (!w) continue;
-      if (!Number.isFinite(val)) { nan = true; continue; }
-      sum += w * val; w2 += w * w; area += w;
-      if (w > 0.4) flags |= f.flags[o];
-    }
-  if (ann.length < 10 || !area) return null;
-  ann.sort((a, b) => a - b);
-  const bg = ann[ann.length >> 1];
-  // Empirical noise: scatter of the sky ring around the aperture.
-  const dev = ann.map((a) => Math.abs(a - bg)).sort((a, b) => a - b);
-  const noise = 1.4826 * dev[dev.length >> 1];
+  const a = aperture(f, x, y, S.mask);
+  if (!a) return null;
   const k = (f.meta.hdr.OMEGA_MEDIAN || 37.8) * 0.0235044; // MJy/sr per pixel -> mJy
   const w = f.meta.wave || { um: (f.wmin + f.wmax) / 2, bw: 0, dx: 0, dy: 0 };
   const um = w.um + w.dx * (x - px) + w.dy * (y - py);
-  return { um, bw: w.bw, flux: (sum - bg * area) * k, err: noise * Math.sqrt(w2) * k, flags, bad: nan || (flags & SUSPECT) !== 0, saturated: nan || (flags & 2) !== 0, epoch: f.epoch, det: f.det, mjd: f.mjd, obs: f.obs };
+  return { um, bw: w.bw, flux: a.sum * k, err: a.err * k, flags: a.flags, bad: a.nan || (a.flags & SUSPECT) !== 0, saturated: a.nan || (a.flags & 2) !== 0, epoch: f.epoch, det: f.det, mjd: f.mjd, obs: f.obs };
 }
 
 let specTimer = 0;
@@ -537,6 +581,7 @@ function renderInspect() {
     const bits = [`brightness G ${st.g.toFixed(1)}`];
     if (st.pm > 0.005) bits.push(`moves <b>${st.pm.toFixed(st.pm >= 1 ? 1 : 2)}″ a year</b>`);
     if (st.plx > 1) bits.push(`about <b>${Math.round(3261.56 / st.plx).toLocaleString()} light-years</b> away`);
+    if (st.var) bits.push('Gaia lists it as <b>variable</b>');
     html = `<h3>Known star</h3><p>Gaia DR3 ${st.id}<br>${bits.join(' · ')}</p>`
       + `<div class="acts">${st.pm > 0.05 ? '<button id="follow">Stack along its motion</button>' : ''}${links}</div>`;
   } else {
@@ -643,7 +688,7 @@ function updateProgress() {
 
 function updateDetails() {
   const f = S.mode === 'frame' && S.curFrame;
-  $('frameinfo').hidden = !f;
+  $('details').hidden = !f;
   if (!f) return;
   const h = f.meta.hdr;
   const rows = [['Taken', (h['DATE-AVG'] || '').replace('T', ' ').slice(0, 19) + ' UTC'],
@@ -664,6 +709,7 @@ function fillEpochSelects() {
 function setMode(mode) {
   S.mode = mode; S.cur = 0; stopPlay();
   for (const b of $('modes').children) b.setAttribute('aria-selected', b.dataset.mode === mode);
+  $('modeText').textContent = HINTS[mode];
   $('diffCtl').hidden = mode !== 'diff';
   $('stackCtl').hidden = mode !== 'stack';
   const canPlay = mode === 'epoch' || mode === 'frame';
@@ -699,6 +745,7 @@ function syncUrl() {
   if (S.mode !== 'epoch') p.set('mode', S.mode);
   if (S.bands.size < 6) p.set('bands', [...S.bands].sort().join(''));
   if (S.vel[0] || S.vel[1]) { p.set('mue', S.vel[0].toFixed(2)); p.set('mun', S.vel[1].toFixed(2)); }
+  if (S.click) p.set('at', `${S.click[0].toFixed(1)},${S.click[1].toFixed(1)}`);
   if (!S.showGaia) p.set('gaia', 0);
   if (!S.wise) p.set('wise', 0);
   for (const k of ['embed', 'cpu']) if (params.get(k)) p.set(k, params.get(k));
@@ -711,8 +758,16 @@ function drawBands() {
   const edges = [0.75, 1.11, 1.64, 2.42, 3.82, 4.42, 5.0];
   const labels = ['0.75', '', '1.6', '2.4', '3.8', '4.4', '5 µm'];
   $('bandTicks').innerHTML = edges.map((e, i) => `<span style="left:${(100 * (e - 0.75)) / 4.25}%">${labels[i]}</span>`).join('');
-  $('bandText').textContent = S.bands.size === 6 ? 'Infrared colour: all six bands added together' : `Infrared colour: ${bandText()} only`;
+  refreshBands();
+}
+function refreshBands() {
+  for (const b of $('bands').children) b.setAttribute('aria-pressed', S.bands.has(+b.dataset.det));
+  $('bandText').textContent = S.bands.size === 6 ? 'All six infrared bands' : `${bandText()} only`;
   $('bandAll').hidden = S.bands.size === 6;
+}
+function setBands(set) {
+  S.bands = set; S.cur = 0;
+  refreshBands(); syncUrl(); requestDraw();
 }
 
 function setVel(e, n) {
@@ -743,8 +798,9 @@ function drawPad() {
 }
 
 function resize() {
-  const W = cssSize(), dpr = Math.min(devicePixelRatio || 1, 2), px = Math.max(64, Math.round(W * dpr));
-  for (const id of ['gl', 'overlay']) { const cv = $(id); if (cv.width !== px) { cv.width = px; cv.height = px; } }
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.max(64, Math.round(cssW() * dpr)), h = Math.max(64, Math.round(cssH() * dpr));
+  for (const id of ['gl', 'overlay']) { const cv = $(id); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } }
   requestDraw(); drawTimeline(); drawSpectrum();
 }
 
@@ -753,11 +809,10 @@ async function submitQuery(text) {
   if (c) return go(c.ra, c.dec);
   $('intro').hidden = true;
   setStatus(`Looking up “${text}”…`);
-  try {
-    const r = await (await fetch(`api/resolve?name=${encodeURIComponent(text)}`)).json();
-    if (r.error) return setStatus(`${r.error}. Try coordinates instead.`);
-    go(r.ra, r.dec, text);
-  } catch (e) { setStatus('Name lookup failed. Try coordinates instead.'); }
+  let r;
+  try { r = await (await fetch(`api/resolve?name=${encodeURIComponent(text)}`)).json(); } catch (e) { r = { error: 'Name lookup failed' }; }
+  if (r.error) return setStatus(`${r.error}. Try coordinates instead.`);
+  return go(r.ra, r.dec, text);
 }
 
 // A uniformly random direction, kept away from the crowded plane of the Milky Way.
@@ -780,16 +835,16 @@ async function copy(text, btn, done = 'Copied') {
 
 const TOUR = [
   ['play', 'Press play. The picture flips between telescope passes, six months apart. Watch for any dot that jumps, appears or fades.'],
-  ['stage', 'Blue rings mark stars the Gaia catalogue already knows. Click any dot to see what it is and read its spectrum. Scroll to zoom, drag to move.'],
-  ['bands', 'Each block is a slice of infrared colour. Cold objects such as brown dwarfs only show up toward the red end — click a block to look there alone.'],
-  ['modes', 'Nothing obvious? Difference removes everything that stayed still. Shift & stack adds up every exposure to reveal movers too faint for one image.'],
+  ['stage', 'Blue rings are stars the Gaia catalogue already knows. Click any dot to see what it is and read its spectrum. Scroll to zoom, drag to move.'],
+  ['ptabs', 'Whole field lists every source that moved since 2010 or changed brightness, so you know where to look first.'],
+  ['modes', 'Difference removes everything that stayed still. Stack adds up every exposure to reveal movers too faint for one image. The colour strip below chooses the infrared bands: click one, or drag across several.'],
 ];
 let tourAt = -1;
 function tour(i) {
   document.querySelector('.coach-target')?.classList.remove('coach-target');
   tourAt = i;
   const box = $('coach');
-  if (i < 0 || i >= TOUR.length) { box.hidden = true; try { localStorage.setItem('ds_tour', '1'); } catch (e) { /* private mode */ } return; }
+  if (i < 0 || i >= TOUR.length) { box.hidden = true; try { localStorage.setItem('sp_tour', '1'); } catch (e) { /* private mode */ } return; }
   const el = $(TOUR[i][0]);
   el.classList.add('coach-target');
   el.scrollIntoView({ block: 'nearest' });
@@ -809,6 +864,10 @@ function tour(i) {
 
 function bind() {
   $('presets').innerHTML = PRESETS.map((p, i) => `<button data-i="${i}">${p.name}<span>${p.why}</span></button>`).join('');
+  $('foundSection').hidden = !FOUND.length;
+  $('found').innerHTML = FOUND.map((f) => `<button data-url="${f.url}"><i>${f.kind}</i>${f.name}<span>${f.what}</span></button>`).join('');
+  $('foundNote').textContent = FOUND_NOTE;
+  $('found').onclick = (ev) => { const b = ev.target.closest('button'); if (b) location.href = b.dataset.url; };
   $('presets').onclick = (ev) => {
     const p = PRESETS[ev.target.closest('button')?.dataset.i];
     if (!p) return;
@@ -828,14 +887,36 @@ function bind() {
   $('coachSkip').onclick = () => tour(-1);
 
   $('modes').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setMode(b.dataset.mode); };
-  $('bands').onclick = (ev) => {
-    const d = +ev.target.dataset.det; if (!d) return;
-    if (S.bands.size === 6) S.bands = new Set([d]); // first click picks a single band
-    else if (S.bands.has(d) && S.bands.size > 1) S.bands.delete(d);
-    else S.bands.add(d);
-    S.cur = 0; drawBands(); syncUrl(); requestDraw();
+  // Band strip: click picks one band, dragging picks a range, shift/ctrl-click adds or removes one.
+  const strip = $('bands');
+  let drag = null;
+  const detAt = (ev) => +(document.elementFromPoint(ev.clientX, ev.clientY)?.dataset?.det || 0);
+  const span = (a, b) => { const out = new Set(); for (let d = Math.min(a, b); d <= Math.max(a, b); d++) out.add(d); return out; };
+  strip.onpointerdown = (ev) => {
+    const d = detAt(ev); if (!d) return;
+    strip.setPointerCapture(ev.pointerId);
+    drag = { a: d, b: d, before: new Set(S.bands), moved: false, add: ev.shiftKey || ev.metaKey || ev.ctrlKey };
   };
-  $('bandAll').onclick = () => { S.bands = new Set([1, 2, 3, 4, 5, 6]); S.cur = 0; drawBands(); syncUrl(); requestDraw(); };
+  strip.onpointermove = (ev) => {
+    if (!drag) return;
+    const d = detAt(ev);
+    if (d && d !== drag.b) { drag.b = d; drag.moved = true; setBands(span(drag.a, d)); }
+  };
+  strip.onpointerup = strip.onpointercancel = () => {
+    if (!drag) return;
+    const { a, before, moved, add } = drag; drag = null;
+    if (moved) return;
+    if (add) { const next = new Set(before); if (next.has(a) && next.size > 1) next.delete(a); else next.add(a); return setBands(next); }
+    setBands(before.size === 1 && before.has(a) ? new Set([1, 2, 3, 4, 5, 6]) : new Set([a]));
+  };
+  strip.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { const d = +ev.target.dataset.det; if (d) { ev.preventDefault(); setBands(S.bands.size === 1 && S.bands.has(d) ? new Set([1, 2, 3, 4, 5, 6]) : new Set([d])); } } };
+  $('bandAll').onclick = () => setBands(new Set([1, 2, 3, 4, 5, 6]));
+  $('ptabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setTab(b.dataset.tab); };
+  $('hits').onclick = (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    const h = hitList()[+b.dataset.i]; if (!h) return;
+    S.hit = h; selectSky(h.e, h.n, true); renderHits(); setTab('spot');
+  };
 
   const toggle = (id, key, after) => { $(id).onclick = () => { S[key] = !S[key]; $(id).setAttribute('aria-pressed', S[key]); after?.(); syncUrl(); requestDraw(); }; $(id).setAttribute('aria-pressed', S[key]); };
   toggle('tGaia', 'showGaia');
@@ -883,12 +964,12 @@ function bind() {
     if (down && ev.buttons) {
       const dx = p[0] - down.p[0], dy = p[1] - down.p[1];
       if (Math.hypot(dx, dy) > 4) down.moved = true;
-      if (down.moved) { const s = S.view / cssSize(); S.center = [down.c[0] + dx * s, down.c[1] + dy * s]; requestDraw(); }
+      if (down.moved) { const s = S.view / cssW(); S.center = [down.c[0] + dx * s, down.c[1] + dy * s]; requestDraw(); }
     }
     readout(p);
   };
   stage.onpointerup = (ev) => {
-    if (down && !down.moved && S.frames.length) { S.click = cssToSky(local(ev)); renderInspect(); computeSpectrum(); requestDraw(); }
+    if (down && !down.moved && S.frames.length) { S.hit = null; selectSky(...cssToSky(local(ev))); renderHits(); setTab('spot'); }
     down = null;
   };
   stage.onpointerleave = () => { $('readout').textContent = ''; };
@@ -896,7 +977,7 @@ function bind() {
   stage.addEventListener('wheel', (ev) => {
     ev.preventDefault();
     const p = local(ev), before = cssToSky(p);
-    S.view = Math.min(S.fov * 60, Math.max(20, S.view * Math.exp(ev.deltaY * 0.0015)));
+    S.view = Math.min(S.fov * 60 * 1.2, Math.max(20, S.view * Math.exp(ev.deltaY * 0.0015)));
     const after = cssToSky(p);
     S.center = [S.center[0] + before[0] - after[0], S.center[1] + before[1] - after[1]];
     requestDraw();
@@ -935,6 +1016,78 @@ function readout(p) {
   $('readout').textContent = text;
 }
 
+// ---------- functions offered to AI agents (see mcp.js) ----------
+
+const round = (v, d = 2) => (Number.isFinite(v) ? +v.toFixed(d) : null);
+const shareLink = () => location.href;
+const agentApi = {
+  async look(target, fieldArcmin) {
+    if ([3, 6, 10, 15, 20].includes(+fieldArcmin)) setFov(+fieldArcmin);
+    await (/^random$/i.test(target.trim()) ? randomPatch() : submitQuery(target.trim()));
+    if (!S.loaded) return { error: $('status').textContent || 'Nothing was loaded.' };
+    for (let i = 0; i < 20 && !S.gaia; i++) await new Promise((r) => setTimeout(r, 500)); // let the catalogue arrive
+    runScan();
+    return { ...this.view(), changes: this.changes(true, 15) };
+  },
+  view() {
+    const spx = S.frames.filter((f) => f.src === 'SPX');
+    return {
+      target: { name: S.name || null, ra: round(S.ra, 5), dec: round(S.dec, 5) }, field_arcmin: S.fov, loaded: S.loaded,
+      mode: { epoch: 'blink', diff: 'difference', stack: 'stack', frame: 'exposures' }[S.mode], bands: [...S.bands].sort(),
+      motion_arcsec_per_year: { east: S.vel[0], north: S.vel[1] },
+      exposures: spx.filter((f) => f.state === 'ok').length,
+      passes: S.epochs.filter((e) => e.src === 'SPX').map((e) => ({ label: e.label, exposures: e.n, from: fmtDate(e.t0), to: fmtDate(e.t1) })),
+      wise_2010_loaded: S.frames.some((f) => f.src === 'WISE' && f.state === 'ok'), gaia_stars: S.gaia ? S.gaia.length : null,
+      incomplete_archive_answer: S.partial, link: shareLink(),
+    };
+  },
+  changes(onlyFlagged = true, limit = 40) {
+    if (!S.scan) return { error: 'No field is loaded yet. Call look_at_sky first.' };
+    const list = S.scan.sources.filter((h) => !onlyFlagged || h.kinds.length).slice(0, limit).map((h) => ({
+      ra: round(h.ra, 5), dec: round(h.dec, 5), detection_snr: round(h.snr, 0), flags: h.kinds, saturated: h.saturated,
+      gaia: h.gaia ? { id: h.gaia.id, g_mag: round(h.gaia.g, 1), motion_arcsec_per_year: round(h.gaia.pm, 3), listed_variable: h.gaia.var, stars_within_9_arcsec: h.gaiaNear } : null,
+      moved_since_2010: h.moved ? { paired_from_separate_2010_source: !!h.moved.paired, arcsec: round(h.moved.arcsec, 1), arcsec_per_year: round(h.moved.perYear, 3), east_per_year: round(h.moved.east, 3), north_per_year: round(h.moved.north, 3), sigma: round(h.moved.sigma, 1) } : null,
+      brightness_change: h.change ? { percent: round(h.change.percent, 0), from: h.change.from, to: h.change.to, matched_measurements: h.change.n, sigma: round(h.change.z, 1), field_sigma: round(h.change.fieldSigma, 1) } : null,
+      summary: describe(h),
+    }));
+    return { ...S.scan.summary, listed: list.length, sources: list };
+  },
+  inspect(ra, dec) {
+    if (!S.frames.length) return { error: 'No field is loaded yet. Call look_at_sky first.' };
+    let dra = ra - S.ra; if (dra > 180) dra -= 360; if (dra < -180) dra += 360;
+    selectSky(dra * cosDec() * 3600, (dec - S.dec) * 3600, true); setTab('spot');
+    const st = nearestGaia(), by = {};
+    for (const p of S.spectrum) { if (p.bad) continue; const k = `${S.epochs[p.epoch].label}|${p.det}`; (by[k] = by[k] || []).push(p.flux); }
+    const spectrum = Object.entries(by).map(([k, v]) => { const [pass, det] = k.split('|'); v.sort((a, b) => a - b); return { pass, band: +det, micron: `${DET[det].lo}-${DET[det].hi}`, median_mJy: round(v[v.length >> 1], 3), measurements: v.length }; });
+    return {
+      ra: round(ra, 5), dec: round(dec, 5),
+      gaia: st ? { id: st.id, g_mag: round(st.g, 1), motion_arcsec_per_year: round(st.pm, 3), parallax_mas: round(st.plx, 2), listed_variable: st.var } : (S.gaia ? 'no Gaia star within 8 arcsec' : 'catalogue not loaded'),
+      measurements: S.spectrum.length, clean: S.spectrum.filter((p) => !p.bad).length,
+      saturated: S.spectrum.length > 0 && S.spectrum.filter((p) => p.saturated).length > 0.6 * S.spectrum.length,
+      spectrum, link: shareLink(),
+    };
+  },
+  setView(a) {
+    const modes = { blink: 'epoch', difference: 'diff', stack: 'stack', exposures: 'frame' };
+    if (a.mode && modes[a.mode]) setMode(modes[a.mode]);
+    if (Array.isArray(a.bands)) { const b = a.bands.map(Number).filter((d) => DET[d]); if (b.length) setBands(new Set(b)); }
+    if (a.motion_east !== undefined || a.motion_north !== undefined) setVel(+(a.motion_east ?? S.vel[0]) || 0, +(a.motion_north ?? S.vel[1]) || 0);
+    if (typeof a.known_stars === 'boolean' && a.known_stars !== S.showGaia) $('tGaia').click();
+    if (typeof a.wise_2010 === 'boolean' && a.wise_2010 !== S.wise) $('tWise').click();
+    if (a.play === true) startPlay(); if (a.play === false) stopPlay();
+    return this.view();
+  },
+};
+
+// Copy of the image pane's centre square, for saving a picture of the current view.
+S.snapshot = (size = 420) => {
+  draw(); // a WebGPU canvas can only be read in the same task that drew it
+  const gl = $('gl'), side = Math.min(gl.width, gl.height), c = document.createElement('canvas');
+  c.width = c.height = size;
+  c.getContext('2d').drawImage(gl, (gl.width - side) / 2, (gl.height - side) / 2, side, side, 0, 0, size, size);
+  return c;
+};
+
 function init() {
   if (params.get('embed')) document.body.classList.add('embed');
   const fov = +params.get('fov');
@@ -942,12 +1095,15 @@ function init() {
   if (params.get('bands')) { const b = [...params.get('bands')].map(Number).filter((d) => DET[d]); if (b.length) S.bands = new Set(b); }
   if (params.get('mue') || params.get('mun')) S.vel = [+params.get('mue') || 0, +params.get('mun') || 0];
   if (params.get('gaia') === '0') S.showGaia = false;
+  const at = (params.get('at') || '').split(',').map(Number);
+  if (at.length === 2 && at.every(Number.isFinite)) S.pendingAt = at;
   if (params.get('wise') === '0') S.wise = false;
   bind(); drawBands();
   $('muE').value = S.vel[0]; $('muN').value = S.vel[1];
   if (Math.hypot(...S.vel) > 12) { S.padRange = 40; $('padRange').value = 40; }
   setMode(['epoch', 'frame', 'diff', 'stack'].includes(params.get('mode')) ? params.get('mode') : 'epoch');
   resize();
+  registerTools(agentApi).then((r) => { S.webmcp = r; }).catch((e) => console.warn('WebMCP registration failed', e));
   document.fonts?.ready.then(() => { drawPad(); drawTimeline(); requestDraw(); });
   const ra = parseFloat(params.get('ra')), dec = parseFloat(params.get('dec'));
   if (Number.isFinite(ra) && Number.isFinite(dec)) go(ra, dec, params.get('name') || '');
@@ -957,7 +1113,7 @@ function init() {
 // Show the guide once, the first time a field has something to look at.
 const tourWatch = setInterval(() => {
   let seen = false;
-  try { seen = !!localStorage.getItem('ds_tour'); } catch (e) { /* private mode */ }
+  try { seen = !!localStorage.getItem('sp_tour'); } catch (e) { /* private mode */ }
   if (seen || params.get('embed')) return clearInterval(tourWatch);
   if ($('intro').hidden && S.mode === 'epoch' && S.frames.filter((f) => f.state === 'ok').length > 12 && tourAt < 0) { clearInterval(tourWatch); tour(0); }
 }, 600);
