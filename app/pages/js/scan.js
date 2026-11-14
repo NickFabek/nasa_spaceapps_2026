@@ -259,7 +259,7 @@ export function scanField(S) {
         const de = s.e - g.e - offE, dn = s.n - g.n - offN, d = Math.hypot(de, dn);
         s.moved = { arcsec: d, perYear: d / yearsToWise, east: de / yearsToWise, north: dn / yearsToWise, sigma: d / scatter, years: yearsToWise, paired: true };
         s.kinds.push('moved');
-      } else s.kinds.push('appeared');
+      } // an unpaired appearance is not reported: nebulosity produces too many false ones
     }
     if (s.change) {
       const dev = Math.log(s.change.ratio) - fieldMed;
@@ -275,7 +275,7 @@ export function scanField(S) {
   }
   // Sources that were in the 2010 image and are not seen now, and were not explained as one end of a fast mover.
   for (const g of gone) {
-    if (g.used) continue;
+    if (g.used || !S.reportGone) continue; // off by default for the same reason
     let best = null, bd = 8;
     for (const st of S.gaia || []) { const [ge, gn] = gaiaAt(st, wiseMjd), d = Math.hypot(ge - g.e, gn - g.n); if (d < bd) { bd = d; best = st; } }
     found.push({ e: g.e, n: g.n, ra: S.ra + g.e / 3600 / cosd, dec: S.dec + g.n / 3600, snr: g.v / sigma, gaia: best, gaiaNear: best ? 1 : 0, wise: { e: g.e, n: g.n, snr: g.v / wsig }, pass: [], saturated: false, nphot: 0, change: null, moved: null, kinds: ['gone'], score: best ? 25 : 50 });

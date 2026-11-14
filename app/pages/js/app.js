@@ -510,7 +510,7 @@ function renderHits() {
   $('fieldCount').textContent = flagged || '';
   if (!sc) { $('fieldNote').textContent = S.frames.length ? 'Checking every source once the images have loaded…' : 'Every source in the field is checked once the images have loaded.'; $('hits').innerHTML = ''; return; }
   const m = sc.summary;
-  $('fieldNote').textContent = `${m.sources} sources checked: ${m.moved} moved since 2010, ${m.appeared + m.gone} appeared or vanished, ${m.changed} changed brightness, ${m.unlisted} not in Gaia.`
+  $('fieldNote').textContent = `${m.sources} sources checked: ${m.moved} moved since 2010, ${m.changed} changed brightness, ${m.unlisted} not in Gaia.`
     + (m.hasWise ? '' : ' The 2010 image did not load, so motion was not checked.');
   const label = { moved: 'Moved', appeared: 'New', gone: 'Gone', changed: 'Changed', unlisted: 'Not listed' };
   $('hits').innerHTML = list.map((h, i) => {
