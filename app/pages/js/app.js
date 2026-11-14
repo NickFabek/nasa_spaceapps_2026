@@ -75,10 +75,18 @@ async function go(ra, dec, name = '', random = false) {
   syncUrl(); renderInspect(); updateProgress(); drawTimeline(); requestDraw();
   setStatus('Searching the SPHEREx archive…');
 
+  // NASA's archive index sometimes refuses requests for a minute at a time, so be patient.
   let res;
-  try { res = await (await fetch(`api/search?ra=${ra}&dec=${dec}`)).json(); } catch (e) { res = { error: String(e) }; }
-  if (gen !== S.gen) return;
-  if (res.error || !res.frames) return setStatus(`The archive did not answer. Try again in a moment.\n${res.error || ''}`);
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try { res = await (await fetch(`api/search?ra=${ra}&dec=${dec}`)).json(); } catch (e) { res = { error: String(e) }; }
+    if (gen !== S.gen) return;
+    // Accept a complete answer at once; settle for a partial one only after several tries.
+    if (res.frames && (!res.errors?.length || attempt >= 6)) break;
+    setStatus(`NASA's archive is busy. Trying again… (${attempt})`);
+    await new Promise((r) => setTimeout(r, 4000));
+    if (gen !== S.gen) return;
+  }
+  if (!res.frames) return setStatus('NASA\'s archive is not answering right now. Please try again in a few minutes.');
   if (!res.frames.length) {
     if (random && S.randomTries++ < 4) return randomPatch();
     return setStatus('SPHEREx has no public images of this spot yet.');
@@ -112,7 +120,8 @@ async function go(ra, dec, name = '', random = false) {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(f);
   }
-  const queue = S.frames.filter((f) => f.src === 'WISE');
+  for (const f of S.frames) if (f.src === 'WISE') loadFrame(f, half, gen);
+  const queue = [];
   for (let i = 0, more = true; more; i++) {
     more = false;
     for (const g of groups.values()) if (g[i]) { queue.push(g[i]); more = true; }
@@ -133,10 +142,12 @@ async function loadFrame(f, half, gen) {
       ? `api/wise?${pos}&scale=${((S.fov * 60 * 1.1) / S.T).toFixed(3)}&band=${f.band}`
       : `api/cutout?key=${encodeURIComponent(f.key)}&${pos}`;
     let r;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const tries = f.src === 'WISE' ? 6 : 3, wait = f.src === 'WISE' ? 5000 : 800; // WISE needs the flaky archive index
+    for (let attempt = 0; attempt < tries; attempt++) {
       r = await fetch(url);
       if (r.ok || r.status === 404 || r.status === 400) break;
-      await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
+      await new Promise((res) => setTimeout(res, wait * (attempt + 1) ** (f.src === 'WISE' ? 0 : 1)));
+      if (gen !== S.gen) return;
     }
     if (gen !== S.gen) return;
     if (r.status === 204) throw new Error('not on this image');
@@ -948,7 +959,7 @@ const tourWatch = setInterval(() => {
   let seen = false;
   try { seen = !!localStorage.getItem('ds_tour'); } catch (e) { /* private mode */ }
   if (seen || params.get('embed')) return clearInterval(tourWatch);
-  if ($('intro').hidden && S.frames.filter((f) => f.state === 'ok').length > 12 && tourAt < 0) { clearInterval(tourWatch); tour(0); }
+  if ($('intro').hidden && S.mode === 'epoch' && S.frames.filter((f) => f.state === 'ok').length > 12 && tourAt < 0) { clearInterval(tourWatch); tour(0); }
 }, 600);
 
 init();
