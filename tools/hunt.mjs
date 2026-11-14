@@ -216,5 +216,19 @@ async function hunt(file) {
 }
 
 // The Gaia function in the site uses the Workers cache; nothing here needs it.
-if (argv[0] === '--inspect') { const [ra, dec] = argv[1].split(',').map(Number); await inspect(ra, dec); } else if (argv[0]) await hunt(argv[0]);
+// Which single exposures carry a signal at this position? A source seen for one moment only
+// (an asteroid crossing the field) shows up in a few simultaneous exposures and nowhere else.
+async function hits(ra, dec) {
+  const S = await loadField(ra, dec, 3), rows = [];
+  for (const f of S.frames) {
+    if (f.src !== 'SPX') continue;
+    const { px, py } = f.meta, a = aperture(f, px, py, S.mask);
+    if (!a || a.nan) continue;
+    rows.push({ mjd: +f.mjd.toFixed(5), date: f.meta.hdr['DATE-AVG'], det: f.det, um: f.meta.wave ? +f.meta.wave.um.toFixed(2) : null, mJy: +(a.sum * (f.meta.hdr.OMEGA_MEDIAN || 37.8) * 0.0235044).toFixed(2), snr: +(a.sum / a.err).toFixed(1), flags: a.flags & SUSPECT, obs: f.obs });
+  }
+  const strong = rows.filter((r) => r.snr > 12).sort((a, b) => a.mjd - b.mjd);
+  console.log(JSON.stringify({ ra, dec, exposures: rows.length, medianSnr: +median(rows.map((r) => r.snr)).toFixed(1), strong }));
+}
+
+if (argv[0] === '--hits') { const [ra, dec] = argv[1].split(',').map(Number); await hits(ra, dec); } else if (argv[0] === '--inspect') { const [ra, dec] = argv[1].split(',').map(Number); await inspect(ra, dec); } else if (argv[0]) await hunt(argv[0]);
 else console.log('usage: node tools/hunt.mjs fields.json | --inspect ra,dec');

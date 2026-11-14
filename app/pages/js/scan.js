@@ -173,6 +173,9 @@ export function scanField(S) {
     }
     s.saturated = sat > 0.3 * spx.length;
     s.nphot = phot.length;
+    // A real source is there in most exposures. A few unrelated cosmic-ray hits on one spot can
+    // fake a bright "source" in the stack while the typical exposure shows nothing.
+    s.spurious = phot.length >= 8 && median(phot.map((p) => p.flux / p.err)) < 0.25 * s.snr / Math.sqrt(spx.length);
     s.change = null;
     for (let a = 0; a < passes.length; a++) for (let b = a + 1; b < passes.length; b++) {
       const A = phot.filter((p) => p.pass === passes[a].i && p.flux > 5 * p.err), B = phot.filter((p) => p.pass === passes[b].i && p.flux > 5 * p.err);
@@ -216,6 +219,8 @@ export function scanField(S) {
       }
     }
   }
+
+  found = found.filter((s) => !s.spurious);
 
   // A 2010 counterpart belongs to the SPHEREx source nearest to it; anything else was a mismatch.
   for (const s of found) {
@@ -270,7 +275,10 @@ export function scanField(S) {
       s.moved = { arcsec: d, perYear: d / yearsToWise, east: de / yearsToWise, north: dn / yearsToWise, sigma: d / scatter, years: yearsToWise, brightnessRatio: ratio };
       // Gaia measures motion far better than this can; a Gaia star it calls slow has not moved, whatever the centroids say.
       const gaiaSlow = s.gaia && s.gaia.pm < 0.1;
-      if (d > Math.max(3, 5 * scatter) && !s.saturated && s.gaiaNear <= 1 && s.red.snr >= 15 && s.wise.snr >= 10 && ratio > 0.33 && ratio < 3 && !gaiaSlow && !s.nearBright && !s.unstable) s.kinds.push('moved');
+      // Faint sources have poorly known positions: allow for that before calling a shift real.
+      const posErr = Math.hypot(scatter, 60 / s.red.snr);
+      s.moved.sigma = d / posErr;
+      if (d > Math.max(3, 5 * posErr) && !s.saturated && s.gaiaNear <= 1 && s.red.snr >= 15 && s.wise.snr >= 10 && ratio > 0.33 && ratio < 3 && !gaiaSlow && !s.nearBright && !s.unstable) s.kinds.push('moved');
     } else if (wimg && yearsToWise > 5 && s.red && s.red.snr >= 30 && !s.nearBright && finiteAt(wimg, s.red.e, s.red.n) && !peakNear(wimg, N, s.red.e, s.red.n, 15, 5 * wsig)) {
       // nothing here in 2010: pair it with the nearest source that has since gone
       let g = null, gd = 600;
