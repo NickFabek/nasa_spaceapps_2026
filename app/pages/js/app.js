@@ -1047,7 +1047,8 @@ const agentApi = {
       ra: round(h.ra, 5), dec: round(h.dec, 5), detection_snr: round(h.snr, 0), flags: h.kinds, saturated: h.saturated,
       gaia: h.gaia ? { id: h.gaia.id, g_mag: round(h.gaia.g, 1), motion_arcsec_per_year: round(h.gaia.pm, 3), listed_variable: h.gaia.var, stars_within_9_arcsec: h.gaiaNear } : null,
       moved_since_2010: h.moved ? { paired_from_separate_2010_source: !!h.moved.paired, arcsec: round(h.moved.arcsec, 1), arcsec_per_year: round(h.moved.perYear, 3), east_per_year: round(h.moved.east, 3), north_per_year: round(h.moved.north, 3), sigma: round(h.moved.sigma, 1) } : null,
-      brightness_change: h.change ? { percent: round(h.change.percent, 0), from: h.change.from, to: h.change.to, matched_measurements: h.change.n, sigma: round(h.change.z, 1), field_sigma: round(h.change.fieldSigma, 1) } : null,
+      brightness_change: h.change ? { percent: round(h.change.percent, 0), from: h.change.from, to: h.change.to, matched_measurements: h.change.n, sigma: round(h.change.z, 1), field_sigma: round(h.change.fieldSigma, 1), same_season_passes: h.change.sameSeason } : null,
+      beside_much_brighter_source: h.nearBright, position_unstable: h.unstable,
       summary: describe(h),
     }));
     return { ...S.scan.summary, listed: list.length, sources: list };

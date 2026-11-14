@@ -186,7 +186,13 @@ export function scanField(S) {
       if (logs.length < 8) continue;
       const m = median(logs), sd = (mad(logs, m) || 0.01) / Math.sqrt(logs.length);
       const z = Math.abs(m) / Math.max(sd, 0.004);
-      if (!s.change || z > s.change.z) s.change = { ratio: Math.exp(m), z, n: logs.length, from: passes[a].label, to: passes[b].label };
+      // Passes a whole number of years apart see the source with the telescope at the same angle, so
+      // light scattered from neighbours cancels. Passes half a year apart do not, and are trusted less.
+      const gap = ((passes[b].t0 + passes[b].t1) - (passes[a].t0 + passes[a].t1)) / 2, off = Math.abs(gap / 365.25 - Math.round(gap / 365.25)) * 365.25;
+      const sameSeason = gap > 200 && off < 50;
+      const cand = { ratio: Math.exp(m), z, n: logs.length, from: passes[a].label, to: passes[b].label, sameSeason };
+      const better = !s.change || (cand.sameSeason && !s.change.sameSeason && z > 6) || (cand.sameSeason === s.change.sameSeason && z > s.change.z);
+      if (better && !(s.change && s.change.sameSeason && s.change.z > 6 && !cand.sameSeason)) s.change = cand;
     }
   }
 
@@ -227,6 +233,14 @@ export function scanField(S) {
   const fieldMed = fieldLogs.length >= 6 ? median(fieldLogs) : 0, fieldSd = fieldLogs.length >= 6 ? Math.max(0.03, mad(fieldLogs, fieldMed)) : 0.06;
 
   for (const s of found) {
+    // Two signs of a false source: a far brighter neighbour (its diffraction pattern lands here and
+    // rotates with the telescope), and a position that jumps from pass to pass.
+    s.nearBright = found.some((t) => t !== s && t.snr > 25 * s.snr && Math.hypot(t.e - s.e, t.n - s.n) < 45);
+    s.neighbour = found.some((t) => t !== s && t.snr > 5 * s.snr && Math.hypot(t.e - s.e, t.n - s.n) < 60);
+    const pp = (s.pass || []).filter(Boolean);
+    s.unstable = pp.some((a) => pp.some((b) => Math.hypot(a[0] - b[0], a[1] - b[1]) > 6));
+  }
+  for (const s of found) {
     s.kinds = [];
     s.moved = null;
     if (s.wise && yearsToWise > 5) {
@@ -235,8 +249,8 @@ export function scanField(S) {
       s.moved = { arcsec: d, perYear: d / yearsToWise, east: de / yearsToWise, north: dn / yearsToWise, sigma: d / scatter, years: yearsToWise, brightnessRatio: ratio };
       // Gaia measures motion far better than this can; a Gaia star it calls slow has not moved, whatever the centroids say.
       const gaiaSlow = s.gaia && s.gaia.pm < 0.1;
-      if (d > Math.max(3, 5 * scatter) && !s.saturated && s.gaiaNear <= 1 && s.red.snr >= 15 && s.wise.snr >= 10 && ratio > 0.33 && ratio < 3 && !gaiaSlow) s.kinds.push('moved');
-    } else if (wimg && yearsToWise > 5 && s.red && s.red.snr >= 30 && finiteAt(wimg, s.red.e, s.red.n) && !peakNear(wimg, N, s.red.e, s.red.n, 15, 5 * wsig)) {
+      if (d > Math.max(3, 5 * scatter) && !s.saturated && s.gaiaNear <= 1 && s.red.snr >= 15 && s.wise.snr >= 10 && ratio > 0.33 && ratio < 3 && !gaiaSlow && !s.nearBright && !s.unstable) s.kinds.push('moved');
+    } else if (wimg && yearsToWise > 5 && s.red && s.red.snr >= 30 && !s.nearBright && finiteAt(wimg, s.red.e, s.red.n) && !peakNear(wimg, N, s.red.e, s.red.n, 15, 5 * wsig)) {
       // nothing here in 2010: pair it with the nearest source that has since gone
       let g = null, gd = 600;
       for (const c of gone) { const d = Math.hypot(c.e - s.e, c.n - s.n); if (!c.used && d < gd) { gd = d; g = c; } }
@@ -251,7 +265,8 @@ export function scanField(S) {
       const dev = Math.log(s.change.ratio) - fieldMed;
       s.change.percent = (Math.exp(dev) - 1) * 100;
       s.change.fieldSigma = Math.abs(dev) / fieldSd;
-      if (Math.abs(dev) > 0.18 && s.change.z > 6 && s.change.fieldSigma > 4 && !s.saturated && s.snr >= 20 && s.gaiaNear <= 2) s.kinds.push('changed');
+      if (Math.abs(dev) > 0.18 && s.change.z > 6 && s.change.fieldSigma > 4 && !s.saturated && s.snr >= 20 && s.gaiaNear <= 2
+        && !s.nearBright && !s.unstable && (s.change.sameSeason || !s.neighbour)) s.kinds.push('changed');
     }
     if (!s.gaia && S.gaia) s.kinds.push('unlisted');
     // rank: unexplained things first
