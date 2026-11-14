@@ -44,30 +44,20 @@ and add the token as `<meta http-equiv="origin-trial" content="…">` in `app/pa
 
 ## What scans have found
 
-An AI agent drove the tool over about 250 fields (star-forming regions and the northern Galactic
+An AI agent drove the tool over about 430 fields (star-forming regions and the northern Galactic
 plane), first through its WebMCP tools and then with `tools/hunt.mjs`, and checked every flagged source against SIMBAD, the AAVSO Variable
 Star Index (VSX), Gaia DR3 and its variability tables, 2MASS, AllWISE, and the ZTF and WISE
 variable-star catalogues.
 
-**New variable-star candidates** (real change in SPHEREx data, no variability on record in any of
-the above; independent confirmation still needed):
-
-- **2MASS J20355040+4349233** (RA 308.95999, Dec +43.82317). Very red (J−K = 4.2), no SIMBAD entry,
-  no Gaia counterpart. At matched wavelengths it dimmed 13–24% in five bands between Jun 2025 and
-  Jun 2026 (most of it by Oct 2025). Twelve other stars in the field changed by 0 to −3%.
-- **Gaia DR3 2054043683842071424** (RA 303.11985, Dec +31.78993). Known only as an Hα-excess source
-  (Fratta+ 2021). Below 1.1 µm it is unchanged, in agreement with ZTF photometry, which is flat from
-  2018 to Oct 2025. Its infrared excess grew from May 2025 to May 2026: +23% at 1.4 µm, +32% at 2 µm,
-  +59% at 4.1 µm, +77% at 4.7 µm, consistent with a circumstellar disk building up.
-- **2MASS J19053064+0612311** (RA 286.37767, Dec +6.20867). Extremely red (J−K = 5.4), in the
-  dust of the Galactic plane, no SIMBAD entry, no Gaia counterpart. It brightened through all three
-  passes regardless of season: 4.7 µm +12% (Sep 2025 → Apr 2026) then +10% (→ Sep 2026); 4.1 µm +21%
-  and 2 µm +22% over the year.
-
-Two weaker candidates from the same hunt, real but with caveats: **2MASS J20451747+4430291**
-(RA 311.32274, Dec +44.50809; faded 15–41% between same-season passes, but three Gaia stars are
-blended within 9″) and **2MASS J19164098+1131014** (RA 289.17074, Dec +11.51693; brightened 30–50%
-in three bands, but the bands do not all agree).
+**New variable-star candidates: 14.** Each shows a real change in SPHEREx data, is independently
+confirmed as variable by ten years of NEOWISE photometry, and has no variability on record in SIMBAD,
+VSX, Gaia DR3, or the ZTF, WISE and AGB catalogues checked. The full table is in
+[`submissions/candidates.md`](submissions/candidates.md); draft AAVSO entries for three are alongside it.
+The largest: 2MASS J19262114+1813483 (1.6 mag in NEOWISE; 36–68% fainter at 2–5 µm in Sep 2026 than a
+year before), 2MASS J19013726+0318372 (1.5 mag) and 2MASS J18483503+0025511 (1.2 mag). The most unusual:
+Gaia DR3 2054043683842071424, an Hα-emission star with repeated infrared outbursts since 2020 and a new
+one under way. None is confirmed by anyone else, and stars like these are common in the Galactic plane:
+they are new to the catalogues, not rare objects.
 
 **Known objects caught changing**
 
