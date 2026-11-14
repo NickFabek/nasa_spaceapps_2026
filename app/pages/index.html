@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Driftscope — watch the SPHEREx sky move</title>
+  <meta name="description" content="Blink, stack and difference NASA SPHEREx infrared images of any patch of sky to find things that move or change.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./"><span class="dot"></span>Driftscope</a>
+    <form id="search" class="search">
+      <input id="q" type="text" autocomplete="off" spellcheck="false"
+        placeholder="Object name or RA Dec — e.g. 08h55m10.8s -07d14m42s" aria-label="Object name or coordinates">
+      <select id="fov" aria-label="Field of view">
+        <option value="3">3′ field</option>
+        <option value="6" selected>6′ field</option>
+        <option value="10">10′ field</option>
+        <option value="15">15′ field</option>
+        <option value="20">20′ field</option>
+      </select>
+      <button type="submit">Look</button>
+    </form>
+    <nav id="presets" class="presets" aria-label="Example targets"></nav>
+  </header>
+
+  <main class="layout">
+    <section class="viewer">
+      <div class="stage" id="stage">
+        <canvas id="gl"></canvas>
+        <canvas id="overlay"></canvas>
+        <div class="badge" id="caption"></div>
+        <div class="readout" id="readout"></div>
+        <div class="status" id="status"></div>
+      </div>
+      <div class="transport">
+        <button id="prev" title="Previous (←)">◀</button>
+        <button id="play" title="Play / pause (space)">Play</button>
+        <button id="next" title="Next (→)">▶</button>
+        <label class="speed">Speed <input id="speed" type="range" min="0.5" max="12" step="0.5" value="2"></label>
+        <span class="progress" id="progress"></span>
+      </div>
+      <canvas id="timeline" class="timeline" height="96"></canvas>
+    </section>
+
+    <aside class="side">
+      <div class="panel">
+        <div class="tabs" id="modes" role="tablist">
+          <button data-mode="epoch" title="One stacked image per visit of the survey; blink between visits">Blink visits</button>
+          <button data-mode="frame" title="Step through every individual exposure">Frames</button>
+          <button data-mode="diff" title="Subtract one visit from another">Difference</button>
+          <button data-mode="stack" title="Shift every exposure along a motion and add them up">Shift &amp; stack</button>
+        </div>
+        <p class="hint" id="modeHint"></p>
+
+        <div id="diffCtl" class="row" hidden>
+          <label>Show <select id="epA"></select></label>
+          <label>minus <select id="epB"></select></label>
+        </div>
+
+        <div id="stackCtl" hidden>
+          <div class="padrow">
+            <canvas id="pad" width="150" height="150" title="Drag to set the motion"></canvas>
+            <div class="padside">
+              <label>East <input id="muE" type="number" step="0.1" value="0"> ″/yr</label>
+              <label>North <input id="muN" type="number" step="0.1" value="0"> ″/yr</label>
+              <label>Pad range <select id="padRange"><option>3</option><option selected>12</option><option>40</option></select> ″/yr</label>
+              <button id="muReset" type="button">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Wavelength bands</h2>
+        <div class="chips" id="bands"></div>
+        <p class="hint">Each exposure sees the target at one wavelength. Compare like with like by picking a band.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Display</h2>
+        <label class="slider">Brightness <input id="stretch" type="range" min="0.8" max="4.5" step="0.05" value="2.6"></label>
+        <div class="row">
+          <label><input id="invert" type="checkbox"> Invert</label>
+          <label><input id="nearest" type="checkbox"> Show true pixels</label>
+        </div>
+        <details>
+          <summary>Hide flagged pixels</summary>
+          <div class="flags" id="flags"></div>
+        </details>
+      </div>
+
+      <div class="panel">
+        <h2>Spectrum <span class="sub" id="specTitle">click a source in the image</span></h2>
+        <canvas id="spec" height="210"></canvas>
+        <div class="row">
+          <button id="specCsv" type="button" disabled>Download CSV</button>
+          <span class="sub" id="specNote"></span>
+        </div>
+      </div>
+
+      <div class="panel" id="detailPanel">
+        <h2>Details</h2>
+        <dl id="details"></dl>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="foot">
+    Images: NASA SPHEREx via <a href="https://irsa.ipac.caltech.edu/Missions/spherex.html" target="_blank" rel="noopener">IRSA</a>.
+    Names: <a href="https://cds.unistra.fr/" target="_blank" rel="noopener">CDS</a>.
+    <span id="renderer"></span>
+  </footer>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
