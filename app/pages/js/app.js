@@ -865,7 +865,7 @@ function tour(i) {
 function bind() {
   $('presets').innerHTML = PRESETS.map((p, i) => `<button data-i="${i}">${p.name}<span>${p.why}</span></button>`).join('');
   $('foundSection').hidden = !FOUND.length;
-  $('found').innerHTML = FOUND.map((f) => `<button data-url="${f.url}"><i>${f.kind}</i>${f.name}<span>${f.what}</span></button>`).join('');
+  $('found').innerHTML = FOUND.map((f) => `<button data-url="${f.url}" class="${/^new/i.test(f.kind) ? 'isnew' : ''}"><i>${f.kind}</i>${f.name}<span>${f.what}</span></button>`).join('');
   $('foundNote').textContent = FOUND_NOTE;
   $('found').onclick = (ev) => { const b = ev.target.closest('button'); if (b) location.href = b.dataset.url; };
   $('presets').onclick = (ev) => {
