@@ -153,13 +153,16 @@ branding are used.
 - **AllWISE Atlas images** (WISE, 2010): the earlier image that gives each field a 16-year baseline
   for motion. https://irsa.ipac.caltech.edu/Missions/wise.html
 - **NEOWISE-R Single Exposure Source Table**: ten years of brightness measurements, used to confirm
-  that the stars flagged by the tool really vary.
+  that the stars flagged by the tool really vary. https://doi.org/10.26131/IRSA144
 - **CatWISE2020 catalogue**: independent proper motions, used to check every motion flag.
+  https://doi.org/10.26131/IRSA551
 - **2MASS and AllWISE source catalogues**: names and earlier brightness of flagged sources.
+  https://irsa.ipac.caltech.edu/Missions/2mass.html and https://doi.org/10.26131/IRSA1
 - **NASA/IPAC Infrared Science Archive (IRSA)** services: SIA image search, Gator catalogue queries.
   https://irsa.ipac.caltech.edu
 - Backyard Worlds: Planet 9 and WiseView (NASA-funded citizen science) inspired the approach, and
   the tool links to WiseView for each position.
+  https://www.zooniverse.org/projects/marckuchner/backyard-worlds-planet-9 and http://byw.tools/wiseview
 
 ## Space Agency Partner Data and Other References
 
@@ -170,9 +173,15 @@ branding are used.
 - **AAVSO International Variable Star Index (VSX)**, via VizieR. https://www.aavso.org/vsx/
 - Variable-star catalogues used for checks: Chen et al. 2020 (ZTF periodic variables), Petrosky et
   al. 2021 and Chen et al. 2018 (WISE variables), and two catalogues of AGB stars from VizieR.
+  https://vizier.cfa.harvard.edu/
 - **Cloudflare** Pages, Workers Functions and R2 (hosting and cache).
+  https://pages.cloudflare.com/ , https://developers.cloudflare.com/workers/ and https://developers.cloudflare.com/r2/
 - **AWS Open Data** (hosts NASA's SPHEREx and WISE image buckets).
+  https://registry.opendata.aws/spherex-qr/ and https://registry.opendata.aws/wise-allwise/
 - **Google Fonts**: Archivo and IBM Plex Mono (SIL Open Font License).
+  https://fonts.google.com/specimen/Archivo and https://fonts.google.com/specimen/IBM+Plex+Mono
 - **WebGPU** and **WebMCP** browser interfaces.
+  https://www.w3.org/TR/webgpu/ and https://github.com/webmachinelearning/webmcp
 - **Claude** by Anthropic (see Use of Artificial Intelligence).
+  https://www.anthropic.com/claude
 - SPHEREx mission facts: NASA/JPL-Caltech SPHEREx pages. https://science.nasa.gov/mission/spherex/
