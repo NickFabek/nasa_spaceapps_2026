@@ -2,18 +2,23 @@
 // Lists every SPHEREx spectral image that covers the position, across all
 // configured releases, by asking IRSA's Simple Image Access service live.
 import { COLLECTIONS, SIA_URL, IBE_PREFIX, json, irsaText } from '../../lib/config.js';
+import { lookupGate } from '../../lib/limit.js';
 
 const FRESH_MS = 6 * 3600 * 1000; // how long a stored answer is used before asking IRSA again
 
 // One collection's frame list. Answers are kept in R2 so that a burst of IRSA
 // errors (it has them) falls back to the last good answer instead of failing.
-async function sia(collection, ra, dec, env) {
+async function sia(collection, ra, dec, env, allowed) {
   const key = `sia/v1/${collection}/${ra}_${dec}`;
   let stored = null;
   if (env.CACHE) {
     const obj = await env.CACHE.get(key);
     if (obj) stored = { at: +(obj.customMetadata?.at || 0), frames: await obj.json() };
     if (stored && Date.now() - stored.at < FRESH_MS) return stored.frames;
+  }
+  if (!allowed()) { // this visitor is over the lookup limit: use an older answer if there is one
+    if (stored) return stored.frames;
+    throw Object.assign(new Error('limited'), { limited: true });
   }
   try {
     const url = `${SIA_URL}?COLLECTION=${collection}&POS=circle+${ra}+${dec}+0.003&RESPONSEFORMAT=CSV`;
@@ -56,7 +61,11 @@ export async function onRequestGet({ request, env }) {
   const ra = Number(q.get('ra')), dec = Number(q.get('dec'));
   if (!(ra >= 0 && ra < 360 && dec >= -90 && dec <= 90)) return json({ error: 'ra/dec required (degrees)' }, 400);
 
-  const results = await Promise.allSettled(COLLECTIONS.map((c) => sia(c, ra.toFixed(5), dec.toFixed(5), env)));
+  // One search counts once against the visitor's lookup limit, however many releases it asks about.
+  let refusal;
+  const allowed = () => { if (refusal === undefined) refusal = lookupGate(request); return !refusal; };
+  const results = await Promise.allSettled(COLLECTIONS.map((c) => sia(c, ra.toFixed(5), dec.toFixed(5), env, allowed)));
+  if (refusal && results.every((r) => r.status === 'rejected' && r.reason.limited)) return refusal;
   const seen = new Set(), frames = [], errors = [];
   results.forEach((r, i) => {
     if (r.status !== 'fulfilled') return errors.push(String(r.reason.message || r.reason));

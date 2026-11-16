@@ -7,6 +7,7 @@
 //   int32[]    flags      (bit 30 set where off-detector)
 // Results are immutable per file, so they are stored in R2 (binding CACHE).
 import { S3_URL, json } from '../../lib/config.js';
+import { buildGate, recordBuild } from '../../lib/limit.js';
 import { BLOCK, parseHeader, dataBytes, makeWcs, parseWaveTable, waveAt, riceDecode32 } from '../../lib/fits.js';
 
 const VERSION = 'v3';
@@ -177,7 +178,6 @@ function pack(meta, image, flags) {
 
 const binHeaders = {
   'content-type': 'application/octet-stream',
- 
   'cache-control': 'public, max-age=31536000, immutable',
 };
 
@@ -195,10 +195,14 @@ export async function onRequestGet({ request, env, waitUntil }) {
     const hit = await env.CACHE.get(cacheKey);
     if (hit) return new Response(hit.body, { headers: { ...binHeaders, 'x-cache': 'r2' } });
   }
+  const gate = await buildGate(request, env);
+  if (gate.refused) return gate.refused;
   try {
     const body = await build(key, ra, dec, half);
+    const keep = !!body && !!env.CACHE && gate.canStore(body.length);
+    recordBuild(env, waitUntil, keep ? body.length : 0);
     if (!body) return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } }); // nothing here
-    if (env.CACHE) waitUntil(env.CACHE.put(cacheKey, body));
+    if (keep) waitUntil(env.CACHE.put(cacheKey, body));
     return new Response(body, { headers: { ...binHeaders, 'x-cache': 'miss' } });
   } catch (e) {
     return json({ error: String(e.message || e) }, e.status || 502);

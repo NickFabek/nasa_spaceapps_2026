@@ -2,6 +2,7 @@
 // Brightest Gaia DR3 stars in the field, with proper motions, so the page can
 // draw every catalogued star where it should be on any date.
 import { json } from '../../lib/config.js';
+import { lookupGate } from '../../lib/limit.js';
 
 const TAP = 'https://gea.esac.esa.int/tap-server/tap/sync';
 
@@ -15,6 +16,8 @@ export async function onRequestGet({ request, waitUntil }) {
   const cache = caches.default;
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
+  const refusal = lookupGate(request);
+  if (refusal) return refusal;
 
   const adql = `SELECT TOP 600 source_id,ra,dec,pmra,pmdec,parallax,phot_g_mean_mag,phot_variable_flag FROM gaiadr3.gaia_source `
     + `WHERE 1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',${ra},${dec},${(r / 3600).toFixed(5)})) `
@@ -22,7 +25,7 @@ export async function onRequestGet({ request, waitUntil }) {
   const body = new URLSearchParams({ REQUEST: 'doQuery', LANG: 'ADQL', FORMAT: 'csv', QUERY: adql });
   let text;
   try {
-    const res = await fetch(TAP, { method: 'POST', body });
+    const res = await fetch(TAP, { method: 'POST', body, signal: AbortSignal.timeout(25000) });
     if (!res.ok) return json({ error: `Gaia archive HTTP ${res.status}` }, 502);
     text = await res.text();
   } catch (e) {

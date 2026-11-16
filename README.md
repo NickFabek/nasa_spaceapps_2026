@@ -91,13 +91,31 @@ unrelated cosmic-ray hits on one spot. The scan now rejects both kinds.
 These rejections shaped the scan's rules: ignore sources beside far brighter ones, require a stable
 position, and prefer comparisons between passes a whole year apart.
 
-## Request allowance
+## Limits and cost
 
-Each field opened for the first time costs about 400 Cloudflare Function requests (one per
-exposure). The free plan allows 100,000 a day, roughly 250 new fields; after that the API stops
-until midnight UTC and the page says so. Fields already opened in the same browser load from its
-cache. For long hunts use `tools/hunt.mjs`, which runs the same search, cutout and scan code in
-Node and makes no Cloudflare requests:
+Opening a place for the first time makes about 400 requests to the site's API (one per exposure),
+and each builds an image tile from NASA's files and stores it in R2. `app/lib/limit.js` caps that
+work; the numbers are at the top of the file.
+
+| Limit | Value | When it is reached |
+|---|---|---|
+| New tiles per visitor | 2,000 per 10 minutes (about 5 new places) | That visitor waits; places opened before still load |
+| Lookups per visitor (archive search, star list, name) | 90 per 10 minutes | That visitor waits |
+| New tiles per day, everyone together | 30,000 (about 75 new places) | No new places until midnight UTC; cached ones still load |
+| New tile data stored per day | 400 MB | Tiles are still served, but not kept in R2 |
+| New tile data stored in total | 6 GB | Same |
+
+Tiles already in R2 are served without limit. The per-visitor counts are kept per server instance,
+so they are approximate; the daily counts are shared through one small R2 object.
+
+What the code cannot do: Cloudflare counts every request to `/api/*`, including ones refused with
+"429". On the Workers Paid plan that is 10 million requests a month included, then $0.30 per million.
+To make extra cost impossible, switch the account back to the Workers Free plan: the API then stops
+at 100,000 requests a day and the page says so. To bound storage, add an R2 lifecycle rule that
+deletes objects under `cut/` after 30 days; the site rebuilds any tile it needs.
+
+For long hunts use `tools/hunt.mjs` without `--api`. It runs the same search, cutout and scan code
+in Node, makes no Cloudflare requests and is not limited:
 
 ```bash
 node tools/hunt.mjs fields.json          # [["tag", ra, dec], ...]
@@ -119,6 +137,7 @@ node tools/crosscheck.mjs "286.37767,6.20867"
 - `app/functions/api/gaia.js` — Gaia DR3 stars in the field.
 - `app/functions/api/resolve.js` — object name to coordinates (CDS Sesame), proper motion applied.
 - `app/lib/config.js` — list of SPHEREx releases to search. **Add new releases here.**
+- `app/lib/limit.js` — per-visitor and daily limits on the API. **Change limits here.**
 
 Tiles and search answers are cached in R2 (binding `CACHE`). No API keys are needed.
 `app/pages/_headers` sets a content security policy that only runs the site's own scripts. The API

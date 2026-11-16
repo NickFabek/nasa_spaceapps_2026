@@ -78,7 +78,7 @@ const cosDec = () => Math.cos(S.dec * Math.PI / 180);
 async function go(ra, dec, name = '', random = false) {
   const gen = ++S.gen;
   if (!random) S.randomTries = 0;
-  Object.assign(S, { ra, dec, name, frames: [], epochs: [], cur: 0, curEp: -1, epUser: false, click: null, spectrum: [], gaia: null, loaded: false, scan: null, hit: null, center: [0, 0], view: S.fov * 60, curFrame: null });
+  Object.assign(S, { ra, dec, name, limited: '', frames: [], epochs: [], cur: 0, curEp: -1, epUser: false, click: null, spectrum: [], gaia: null, loaded: false, scan: null, hit: null, center: [0, 0], view: S.fov * 60, curFrame: null });
   if (S.pendingAt) { S.click = S.pendingAt; S.pendingAt = null; }
   stopPlay();
   setIntro(false);
@@ -96,6 +96,7 @@ async function go(ra, dec, name = '', random = false) {
     } catch (e) { res = { error: String(e) }; }
     if (gen !== S.gen) return;
     if (res.quota) return setStatus('This site has used up its free request allowance for today.\nIt resets at midnight UTC. Fields you have not opened before cannot load until then.');
+    if (res.limit) return setStatus(res.error);
     // Accept a complete answer at once; settle for a partial one only after several tries.
     if (res.frames && (!res.errors?.length || attempt >= 6)) break;
     setStatus(`NASA's archive is busy. Trying again… (${attempt})`);
@@ -162,12 +163,13 @@ async function loadFrame(f, half, gen) {
     const tries = f.src === 'WISE' ? 6 : 3, wait = f.src === 'WISE' ? 5000 : 800; // WISE needs the flaky archive index
     for (let attempt = 0; attempt < tries; attempt++) {
       r = await fetch(url);
-      if (r.ok || r.status === 404 || r.status === 400) break;
+      if (r.ok || r.status === 404 || r.status === 400 || r.status === 429) break;
       await new Promise((res) => setTimeout(res, wait * (attempt + 1) ** (f.src === 'WISE' ? 0 : 1)));
       if (gen !== S.gen) return;
     }
     if (gen !== S.gen) return;
     if (r.status === 204) throw new Error('not on this image');
+    if (r.status === 429) { S.limited = (await r.json().catch(() => ({}))).error || 'The site is limiting new images for now.'; throw new Error('limit reached'); }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const buf = await r.arrayBuffer();
     if (gen !== S.gen) return;
@@ -683,7 +685,10 @@ function updateProgress() {
   const bar = $('loadbar');
   bar.style.width = S.frames.length ? `${(100 * done) / S.frames.length}%` : '0';
   bar.style.opacity = S.frames.length && done < S.frames.length ? 1 : 0;
+  $('limited').hidden = !S.limited; $('limited').title = S.limited || '';
   if (!spx.length) { $('progress').textContent = ''; $('partial').hidden = true; return; }
+  // Nothing at all could be fetched: say why in the middle of the picture.
+  if (S.limited && !ok && done === S.frames.length) setStatus(S.limited);
   const passes = S.epochs.filter((e) => e.src === 'SPX').length;
   const rels = [...new Set(spx.map((f) => f.rel.toUpperCase()))].join(' + ');
   $('progress').textContent = (done < S.frames.length ? `Loading ${ok} of ${spx.length} exposures` : `${ok} exposures`)

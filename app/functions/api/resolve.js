@@ -3,10 +3,13 @@
 // position forward to today using the catalogued proper motion, so that
 // fast-moving stars land in the middle of the field.
 import { json } from '../../lib/config.js';
+import { lookupGate } from '../../lib/limit.js';
 
 export async function onRequestGet({ request }) {
   const name = (new URL(request.url).searchParams.get('name') || '').trim();
   if (!name || name.length > 80) return json({ error: 'name required' }, 400);
+  const refusal = lookupGate(request);
+  if (refusal) return refusal;
   // CDS Sesame, then its mirror at Harvard: either can be down for hours.
   let text = '';
   for (const host of ['https://cds.unistra.fr/cgi-bin', 'https://vizier.cfa.harvard.edu/viz-bin']) {

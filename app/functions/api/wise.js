@@ -3,6 +3,7 @@
 // binary format as /api/cutout, so WISE can be blinked against SPHEREx for a
 // 15-year baseline. Read with range requests from the public WISE bucket.
 import { SIA_URL, json, irsaText } from '../../lib/config.js';
+import { buildGate, recordBuild } from '../../lib/limit.js';
 import { BLOCK, parseHeader, makeSinWcs } from '../../lib/fits.js';
 
 const VERSION = 'v1';
@@ -89,10 +90,14 @@ export async function onRequestGet({ request, env, waitUntil }) {
     const hit = await env.CACHE.get(cacheKey);
     if (hit) return new Response(hit.body, { headers: binHeaders });
   }
+  const gate = await buildGate(request, env);
+  if (gate.refused) return gate.refused;
   try {
     const body = await build(ra, dec, half, scale, band);
+    const keep = !!body && !!env.CACHE && gate.canStore(body.length);
+    recordBuild(env, waitUntil, keep ? body.length : 0);
     if (!body) return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } }); // nothing here
-    if (env.CACHE) waitUntil(env.CACHE.put(cacheKey, body));
+    if (keep) waitUntil(env.CACHE.put(cacheKey, body));
     return new Response(body, { headers: binHeaders });
   } catch (e) {
     return json({ error: String(e.message || e) }, 502);
