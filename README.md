@@ -3,7 +3,14 @@
 NASA Space Apps 2026 — *Planet X and SPHEREx*. A public web tool for finding things that move
 or change in NASA SPHEREx infrared images of any patch of sky.
 
-Live: https://nasa-spaceapps-2026-bgg.pages.dev
+Live: https://nasa-spaceapps-2026-bgg.pages.dev (also https://spherical.software) ·
+[Seven-slide demo](https://nasa-spaceapps-2026-bgg.pages.dev/slides/) ·
+[Submission text](SUBMISSION.md)
+
+**Use of AI.** The code, the wording of the site and the sky scans described below were produced
+with an AI coding assistant (Anthropic's Claude), directed, reviewed and tested by the team. Every
+sky image is real NASA telescope data; no image is AI-generated. This project is not affiliated
+with or endorsed by NASA.
 
 ## What it does
 
@@ -101,6 +108,8 @@ node tools/crosscheck.mjs "286.37767,6.20867"
 ## How it works
 
 - `app/pages/` — static site: plain HTML/CSS/JS, WebGPU with a canvas fallback.
+- `app/pages/js/mission.js` — the 3D diagram of the SPHEREx survey on the start page;
+  `app/pages/slides/` — the submission slides.
 - `app/pages/js/scan.js` — the whole-field check; `app/pages/js/mcp.js` — the agent tools;
   `app/pages/js/found.js` — objects listed on the start page.
 - `app/functions/api/search.js` — asks IRSA which SPHEREx images cover a position.
@@ -112,6 +121,9 @@ node tools/crosscheck.mjs "286.37767,6.20867"
 - `app/lib/config.js` — list of SPHEREx releases to search. **Add new releases here.**
 
 Tiles and search answers are cached in R2 (binding `CACHE`). No API keys are needed.
+`app/pages/_headers` sets a content security policy that only runs the site's own scripts. The API
+sends no cross-origin permission, so other websites cannot call it from their pages, and it only
+reads files that match the SPHEREx archive's naming pattern.
 
 ## Run locally
 

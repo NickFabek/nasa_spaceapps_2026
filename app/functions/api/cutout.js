@@ -177,7 +177,7 @@ function pack(meta, image, flags) {
 
 const binHeaders = {
   'content-type': 'application/octet-stream',
-  'access-control-allow-origin': '*',
+ 
   'cache-control': 'public, max-age=31536000, immutable',
 };
 
@@ -186,7 +186,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
   const key = q.get('key') || '';
   const ra = Number(q.get('ra')), dec = Number(q.get('dec'));
   const half = Math.min(160, Math.max(4, Math.round(Number(q.get('half')) || 40)));
-  if (!/^[\w\-./]+\.fits$/.test(key) || key.includes('..')) return json({ error: 'bad key' }, 400);
+  // Only SPHEREx Level-2 spectral images, e.g. dr1/level2/2025W33_2C/l2b-v27-2026-228/3/level2_..._spx_....fits
+  if (!/^[a-z0-9]+\/level2\/[\w\-]+\/[\w\-]+\/[1-6]\/level2_[\w\-]+\.fits$/.test(key)) return json({ error: 'bad key' }, 400);
   if (!(ra >= 0 && ra < 360 && dec >= -90 && dec <= 90) || q.get('ra') === null) return json({ error: 'ra/dec required' }, 400);
 
   const cacheKey = `cut/${VERSION}/${key}/${ra.toFixed(5)}_${dec.toFixed(5)}_${half}`;

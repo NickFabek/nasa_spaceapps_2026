@@ -81,7 +81,7 @@ async function go(ra, dec, name = '', random = false) {
   Object.assign(S, { ra, dec, name, frames: [], epochs: [], cur: 0, curEp: -1, epUser: false, click: null, spectrum: [], gaia: null, loaded: false, scan: null, hit: null, center: [0, 0], view: S.fov * 60, curFrame: null });
   if (S.pendingAt) { S.click = S.pendingAt; S.pendingAt = null; }
   stopPlay();
-  $('intro').hidden = true;
+  setIntro(false);
   $('q').value = name || `${ra.toFixed(5)} ${dec.toFixed(5)}`;
   syncUrl(); renderInspect(); renderHits(); updateProgress(); drawTimeline(); requestDraw();
   setStatus('Searching the SPHEREx archive…');
@@ -587,7 +587,7 @@ function renderInspect() {
     if (st.pm > 0.005) bits.push(`moves <b>${st.pm.toFixed(st.pm >= 1 ? 1 : 2)}″ a year</b>`);
     if (st.plx > 1) bits.push(`about <b>${Math.round(3261.56 / st.plx).toLocaleString()} light-years</b> away`);
     if (st.var) bits.push('Gaia lists it as <b>variable</b>');
-    html = `<h3>Known star</h3><p>Gaia DR3 ${st.id}<br>${bits.join(' · ')}</p>`
+    html = `<h3>Known star</h3><p>Gaia DR3 ${String(st.id).replace(/\D/g, '')}<br>${bits.join(' · ')}</p>`
       + `<div class="acts">${st.pm > 0.05 ? '<button id="follow">Stack along its motion</button>' : ''}${links}</div>`;
   } else {
     html = `<h3 class="new">Not in Gaia</h3><p>No catalogued star within 8″. It could be a galaxy, something too cool or faint for Gaia, an image artifact — or new. <b>Does it move when you blink?</b></p>`
@@ -812,7 +812,7 @@ function resize() {
 async function submitQuery(text) {
   const c = parseCoords(text);
   if (c) return go(c.ra, c.dec);
-  $('intro').hidden = true;
+  setIntro(false);
   setStatus(`Looking up “${text}”…`);
   let r;
   try { r = await (await fetch(`api/resolve?name=${encodeURIComponent(text)}`)).json(); } catch (e) { r = { error: 'Name lookup failed' }; }
@@ -884,7 +884,7 @@ function bind() {
   $('search').onsubmit = (ev) => { ev.preventDefault(); const t = $('q').value.trim(); if (t) submitQuery(t); };
   $('introSearch').onsubmit = (ev) => { ev.preventDefault(); const t = $('introQ').value.trim(); if (t) submitQuery(t); };
   $('random').onclick = $('introRandom').onclick = randomPatch;
-  $('home').onclick = () => { stopPlay(); tour(-1); $('intro').hidden = false; $('introQ').focus(); };
+  $('home').onclick = () => { stopPlay(); tour(-1); setIntro(true); };
   $('retry').onclick = () => go(S.ra, S.dec, S.name);
   $('share').onclick = () => copy(location.href, $('share'), 'Link copied');
   $('help').onclick = () => tour(0);
@@ -1117,6 +1117,16 @@ S.snapshot = (size = 420) => {
   return c;
 };
 
+// The start page, with its live mission diagram (loaded only when the page is first shown).
+let mission = null;
+function setIntro(show) {
+  $('intro').hidden = !show;
+  if (show) {
+    if (!mission) mission = import('./mission.js').then((m) => m.startMission($('mission'))).catch((e) => { console.warn('mission view failed', e); return null; });
+    else mission.then((m) => m?.resume());
+  } else if (mission) mission.then((m) => m?.pause());
+}
+
 function init() {
   if (params.get('embed')) document.body.classList.add('embed');
   const fov = +params.get('fov');
@@ -1136,7 +1146,7 @@ function init() {
   document.fonts?.ready.then(() => { drawPad(); drawTimeline(); requestDraw(); });
   const ra = parseFloat(params.get('ra')), dec = parseFloat(params.get('dec'));
   if (Number.isFinite(ra) && Number.isFinite(dec)) go(ra, dec, params.get('name') || '');
-  else { $('intro').hidden = false; $('introQ').focus(); }
+  else setIntro(true);
 }
 
 // Show the guide once, the first time a field has something to look at.

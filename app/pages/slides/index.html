@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spherical — project demo (2026 NASA Space Apps Challenge)</title>
+  <meta name="description" content="Seven-slide demo of Spherical, a public tool for comparing NASA SPHEREx images of the sky over time. Code and analysis produced with an AI assistant; all sky images are real telescope data.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="deck.css">
+</head>
+<body>
+
+  <!-- 1. Title -->
+  <section class="slide"><div class="in title">
+    <div>
+      <div class="mark"><span class="dot"></span>2026 NASA SPACE APPS CHALLENGE</div>
+      <h1 style="margin-top:.5em">SPHERICAL</h1>
+      <p class="tag">A public web tool that shows how any patch of sky changes between NASA SPHEREx images, so anyone can spot what moved or changed.</p>
+      <dl class="meta">
+        <dt>Challenge</dt><dd>Planet X and SPHEREx</dd>
+        <dt>Team</dt><dd data-team></dd>
+        <dt>Members</dt><dd data-members></dd>
+        <dt>Try it</dt><dd>spherical.software</dd>
+      </dl>
+    </div>
+    <div>
+      <div class="lens"><img src="../img/blink-2010.jpg" alt=""><img class="b" src="../img/blink-2026.jpg" alt=""></div>
+      <p class="cap" style="text-align:center;margin-top:2.2em">Barnard's Star in 2010 (WISE) and 2026 (SPHEREx). Real images.</p>
+    </div>
+    <div class="foot"><span>Spherical</span><span>1 / 7</span></div>
+  </div></section>
+
+  <!-- 2. Introduction: the problem -->
+  <section class="slide"><div class="in two">
+    <div>
+      <div id="mission"></div>
+      <p class="cap">Live diagram from the site (not to scale): SPHEREx scans one strip of sky per lap.</p>
+    </div>
+    <div>
+      <h2>A new map of the whole sky every six months, and nobody can look at all of it</h2>
+      <ul>
+        <li>NASA's <strong>SPHEREx</strong> telescope, launched in 2025, photographs the entire sky twice a year in <strong>102 colours of infrared light</strong>.</li>
+        <li>It records <strong>hundreds of millions of stars and galaxies</strong>, far more than people can inspect by eye.</li>
+        <li>Things that <strong>move</strong> between maps are close to us: asteroids, comets, brown dwarfs. Things that <strong>change brightness</strong> are stars being born or dying.</li>
+        <li>The challenge: let <strong>anyone</strong> enter a position and watch that patch of sky change over time.</li>
+      </ul>
+    </div>
+    <div class="foot"><span>Spherical</span><span>2 / 7</span></div>
+  </div></section>
+
+  <!-- 3. What we built -->
+  <section class="slide"><div class="in wide">
+    <div>
+      <img class="shot" src="img/viewer.jpg" alt="The Spherical viewer showing a star field, a timeline of exposures and a spectrum">
+      <p class="cap">The tool, showing a star whose infrared glow grew over three SPHEREx passes.</p>
+    </div>
+    <div>
+      <h2>Type a name or coordinates. Get a short film of that spot.</h2>
+      <ul>
+        <li><strong>Blink</strong> between telescope passes; anything that moved jumps.</li>
+        <li><strong>Subtract</strong> one pass from another, or <strong>stack</strong> every exposure along a motion to pull out faint movers.</li>
+        <li>Pick any of the <strong>six infrared bands</strong>; click a dot for its <strong>spectrum</strong>, made on the spot.</li>
+        <li>Known stars are ringed (Gaia); a <strong>2010 WISE image</strong> stretches the timeline to 16 years.</li>
+        <li>Every view is a <strong>link</strong> you can share or embed.</li>
+      </ul>
+    </div>
+    <div class="foot"><span>Spherical</span><span>3 / 7</span></div>
+  </div></section>
+
+  <!-- 4. How it works -->
+  <section class="slide"><div class="in" style="align-content:center">
+    <h2 style="margin:0">How it works: open space-agency data, straight to your browser</h2>
+    <div class="flow">
+      <div><b>1. Ask NASA's archive</b><span>The site asks IRSA which SPHEREx exposures cover your position. A typical spot has 300 to 500.</span></div><i>→</i>
+      <div><b>2. Read only what's needed</b><span>Each exposure is a 60 MB file in NASA's open-data bucket. The site reads just the few kilobytes around your spot.</span></div><i>→</i>
+      <div><b>3. Combine on your GPU</b><span>WebGPU lines up, stacks and subtracts hundreds of exposures live, so every control responds instantly.</span></div>
+    </div>
+    <div class="srcs">
+      <div><b>NASA SPHEREx</b><span>Spectral images, quality flags and wavelength maps (IRSA, releases DR1 and QR3).</span></div>
+      <div><b>NASA WISE and NEOWISE</b><span>A 2010 image for a 16-year baseline, and ten years of brightness history.</span></div>
+      <div><b>ESA Gaia DR3</b><span>Positions and motions of known stars, drawn where they were on each date.</span></div>
+    </div>
+    <p class="note">No account, no download, no API key. New SPHEREx releases appear automatically. Built with plain HTML, CSS and JavaScript on Cloudflare.</p>
+    <div class="foot"><span>Spherical</span><span>4 / 7</span></div>
+  </div></section>
+
+  <!-- 5. It looks for you -->
+  <section class="slide"><div class="in wide">
+    <div>
+      <img class="shot" src="img/difference.jpg" alt="Difference image of Barnard's Star: an orange patch above a blue one">
+      <p class="cap">Sep 2026 minus Sep 2025: Barnard's Star left the blue spot and arrived at the orange one. Black squares are pixels the telescope flagged as unusable.</p>
+    </div>
+    <div>
+      <h2>You don't have to stare. It checks every source for you.</h2>
+      <ul>
+        <li>Each field is scanned automatically: <strong>what moved since 2010</strong>, and <strong>what changed brightness</strong> between passes.</li>
+        <li>Flagged sources are listed and bracketed on the image, with a note on whether a catalogue already knows them.</li>
+        <li>The same functions are offered to <strong>AI agents</strong> through the browser's WebMCP standard, so software can hunt too.</li>
+        <li>An AI agent used these tools, then a script running the same code, to check about <strong>1,000 fields</strong>.</li>
+      </ul>
+    </div>
+    <div class="foot"><span>Spherical</span><span>5 / 7</span></div>
+  </div></section>
+
+  <!-- 6. Results -->
+  <section class="slide"><div class="in two">
+    <div>
+      <h2>Does it work? What it found</h2>
+      <div class="nums">
+        <div><b>9.97″</b><span>per year: Barnard's Star, measured blind. The Gaia catalogue says 10.39.</span></div>
+        <div><b>19</b><span>fast-moving stars picked out of 608 fields away from the Milky Way, with speeds matching Gaia and CatWISE.</span></div>
+        <div><b>14</b><span>stars whose brightness changes were <strong>not on record</strong>. Each is confirmed by ten years of independent NEOWISE data.</span></div>
+      </div>
+      <p class="note" style="margin-top:1.6em">Honest limits: no new moving object yet, the brown dwarf WISE 0855 is too faint for SPHEREx, and the 14 candidates still await outside confirmation.</p>
+    </div>
+    <div>
+      <div class="white"><img src="img/lightcurve.png" alt="Ten-year infrared light curve of one candidate, quiet until 2020 and then repeatedly brightening" style="width:100%;display:block"></div>
+      <p class="cap">One candidate, a hydrogen-emission star: quiet until 2020, then repeated infrared outbursts. SPHEREx caught a new one growing.</p>
+    </div>
+    <div class="foot"><span>Spherical</span><span>6 / 7</span></div>
+  </div></section>
+
+  <!-- 7. Why it matters -->
+  <section class="slide"><div class="in two">
+    <div>
+      <h2>Anyone with a browser can now check a patch of sky that nobody has looked at</h2>
+      <ul>
+        <li><strong>For the public:</strong> a 30-second guide, plain-language labels, and a "random spot" button.</li>
+        <li><strong>For science:</strong> candidates come with spectra, catalogue checks and draft reports for the AAVSO variable-star index.</li>
+        <li><strong>For the future:</strong> every new SPHEREx release adds a pass, and each pass makes motion easier to see.</li>
+      </ul>
+    </div>
+    <div>
+      <dl class="meta">
+        <dt>Site</dt><dd>spherical.software</dd>
+        <dt>Code</dt><dd>github.com/NickFabek/nasa_spaceapps_2026</dd>
+        <dt>Data</dt><dd>NASA SPHEREx, WISE, NEOWISE (IRSA) · ESA Gaia DR3 · CDS name service</dd>
+        <dt>Built with</dt><dd>HTML, CSS, JavaScript, WebGPU, Cloudflare Pages and R2</dd>
+        <dt>AI use</dt><dd>Code and data analysis were produced with an AI assistant (Claude), directed and reviewed by the team. Every sky image is real telescope data; no image is AI-generated.</dd>
+      </dl>
+      <p class="note" style="margin-top:1.4em">Not affiliated with or endorsed by NASA.</p>
+    </div>
+    <div class="foot"><span>Spherical</span><span>7 / 7</span></div>
+  </div></section>
+
+  <div class="nav"><button id="prev" aria-label="Previous slide">‹</button><span id="count"></span><button id="next" aria-label="Next slide">›</button></div>
+  <script type="module" src="deck.js"></script>
+</body>
+</html>

@@ -75,7 +75,7 @@ async function build(ra, dec, half, scale, band) {
   return out; // flags stay zero
 }
 
-const binHeaders = { 'content-type': 'application/octet-stream', 'access-control-allow-origin': '*', 'cache-control': 'public, max-age=31536000, immutable' };
+const binHeaders = { 'content-type': 'application/octet-stream', 'cache-control': 'public, max-age=31536000, immutable' };
 
 export async function onRequestGet({ request, env, waitUntil }) {
   const q = new URL(request.url).searchParams;

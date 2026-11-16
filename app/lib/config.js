@@ -13,7 +13,6 @@ export const json = (obj, status = 200, maxAge = 0) =>
     status,
     headers: {
       'content-type': 'application/json',
-      'access-control-allow-origin': '*',
       'cache-control': maxAge ? `public, max-age=${maxAge}` : 'no-store',
     },
   });

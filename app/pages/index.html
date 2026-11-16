@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Spherical — find what moves in the SPHEREx sky</title>
-  <meta name="description" content="Blink, subtract and stack NASA SPHEREx infrared images of any patch of sky to find things that move or change.">
+  <title>Spherical — compare NASA SPHEREx images of the sky over time</title>
+  <meta name="author" content="Nick Fabek">
+  <meta name="generator" content="Hand-directed; code written with an AI assistant (Claude). All sky images are real NASA telescope data.">
+  <meta name="description" content="A free tool that fetches NASA SPHEREx infrared images of any spot in the sky and shows what moved or changed between one all-sky map and the next.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -127,41 +129,70 @@
   <!-- Start page -->
   <div class="intro" id="intro" hidden>
     <div class="introin">
-      <div class="pitch">
-        <div class="wordmark">SPHERICAL</div>
-        <h1>Find what moves.</h1>
-        <p class="lead">NASA's SPHEREx telescope photographs the entire sky every six months, in 102 infrared wavelengths. Stars hold their place from one pass to the next. Asteroids, comets and nearby brown dwarfs don't.</p>
-        <p class="lead">Flipping between two images of the same sky is how Pluto was found, and how volunteers found most of the brown dwarfs we know. Spherical does it with SPHEREx data, anywhere on the sky.</p>
-        <form id="introSearch" class="search big">
-          <input id="introQ" type="text" autocomplete="off" spellcheck="false" placeholder="Object name, or RA Dec" aria-label="Object name or coordinates">
-          <button type="submit" class="solid">Look</button>
-        </form>
-        <button id="introRandom" class="randombig"><b>Somewhere random</b><span>A field from anywhere on the sky</span></button>
-      </div>
+      <div class="ihead"><div class="wordmark">SPHERICAL</div><a href="slides/">Project slides</a></div>
 
-      <div class="how">
+      <section class="hero">
+        <div class="pitch">
+          <h1>A NASA telescope photographs the entire sky twice a year. Compare the pictures yourself.</h1>
+          <p class="lead">SPHEREx launched in 2025. Every six months it finishes a new map of the whole sky in 102 colours of infrared light, none of them visible to the eye. Spherical is a free tool that fetches those images for any spot you choose and shows you what moved or changed between one map and the next.</p>
+          <form id="introSearch" class="search big">
+            <input id="introQ" type="text" autocomplete="off" spellcheck="false" placeholder="A star or galaxy name, or sky coordinates" aria-label="Object name or coordinates">
+            <button type="submit" class="solid">Look</button>
+          </form>
+          <button id="introRandom" class="randombig"><b>Take me somewhere random</b><span>Most of this sky has never been compared by a person</span></button>
+        </div>
+        <figure class="mission">
+          <div id="mission" aria-label="Animated 3D diagram of the SPHEREx orbit and sky scan"></div>
+          <figcaption>Diagram drawn by the page's code, not a photograph, and not to scale. Drag to turn it. The coloured bar is the patch being photographed; its six colours are the telescope's six infrared detectors.</figcaption>
+        </figure>
+      </section>
+
+      <section class="block">
+        <h2>What SPHEREx is doing up there</h2>
+        <ol class="facts">
+          <li><b>1</b><span><strong>It circles Earth from pole to pole</strong> about 15 times a day, along the line between day and night. From there it never has to look toward the Sun or the Earth.</span></li>
+          <li><b>2</b><span><strong>Each lap scans one thin strip of sky.</strong> As Earth moves around the Sun, that strip shifts by about one degree a day.</span></li>
+          <li><b>3</b><span><strong>After six months the strips have covered everything</strong>, and it begins again. Every image passes through a filter that splits the light into 102 infrared colours.</span></li>
+        </ol>
+      </section>
+
+      <section class="block">
+        <h2>Why compare one map with the next</h2>
+        <div class="why">
+          <div><h3>Things that move are close to us</h3><p>Stars are so far away that they appear fixed. Asteroids, comets and brown dwarfs (dim, failed stars drifting near the Sun) shift between pictures. Pluto was found this way in 1930, by flipping between two photographs.</p></div>
+          <div><h3>Things that change are doing something</h3><p>Newborn stars flare and fade as gas falls onto them. Dying stars swell and shrink. Infrared light passes through the dust that hides both from ordinary telescopes.</p></div>
+          <div><h3>There is too much for scientists alone</h3><p>SPHEREx records hundreds of millions of stars and galaxies. Volunteers comparing images from an earlier NASA telescope, WISE, have found thousands of nearby brown dwarf candidates that software missed. This tool exists so anyone can do the same with SPHEREx.</p></div>
+        </div>
+      </section>
+
+      <section class="block howrow">
         <figure class="demo">
           <div class="lens"><img src="img/blink-2010.jpg" alt="" width="360" height="360"><img class="b" src="img/blink-2026.jpg" alt="" width="360" height="360"></div>
           <figcaption><b class="y1">2010</b><b class="y2">2026</b> Barnard's Star, the fastest-moving star in the sky. Real WISE and SPHEREx images, 4 arcminutes across.</figcaption>
         </figure>
-        <ol class="steps3">
-          <li><b>1</b><span><strong>Pick a spot.</strong> A name, coordinates, or a random field.</span></li>
-          <li><b>2</b><span><strong>Blink it.</strong> Flip between passes and watch for a dot that jumps, appears or fades.</span></li>
-          <li><b>3</b><span><strong>Check it.</strong> Click the dot to see whether it is catalogued and to read its spectrum.</span></li>
-        </ol>
-      </div>
+        <div>
+          <h2>How Spherical works</h2>
+          <ol class="facts">
+            <li><b>1</b><span><strong>You name a place</strong>: an object, sky coordinates, or a random spot.</span></li>
+            <li><b>2</b><span><strong>It gathers every SPHEREx exposure of that spot</strong>, usually 300 to 500, plus a 2010 image from NASA's WISE telescope, and lines them up.</span></li>
+            <li><b>3</b><span><strong>You flip between dates</strong>, subtract one from another, or add them all together. Stars already in Europe's Gaia catalogue are ringed.</span></li>
+            <li><b>4</b><span><strong>It checks every source for you</strong> and lists the ones that moved or changed brightness. Click any of them to see its infrared spectrum.</span></li>
+          </ol>
+        </div>
+      </section>
 
-      <div class="lists">
-        <section id="foundSection" hidden>
-          <h2>Found with Spherical</h2>
-          <div id="found" class="cards"></div>
-          <p class="foundnote" id="foundNote"></p>
-        </section>
-        <section>
-          <h2>Practise on known objects</h2>
-          <div id="presets" class="cards"></div>
-        </section>
-      </div>
+      <section class="block" id="foundSection" hidden>
+        <h2>What it has found so far</h2>
+        <div id="found" class="cards"></div>
+        <p class="foundnote" id="foundNote"></p>
+      </section>
+
+      <section class="block">
+        <h2>Try it on something well known</h2>
+        <div id="presets" class="cards"></div>
+      </section>
+
+      <p class="ifoot">Built for the 2026 NASA Space Apps Challenge, &ldquo;Planet X and SPHEREx&rdquo;. Images: NASA SPHEREx and WISE, served by IRSA. Star catalogue: ESA Gaia. The code was written with an AI assistant (Claude); every sky image is real telescope data. Not affiliated with or endorsed by NASA.</p>
     </div>
   </div>
 

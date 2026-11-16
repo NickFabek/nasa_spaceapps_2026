@@ -1,0 +1,68 @@
+/* Spherical submission deck: seven 16:9 slides. Arrow keys or click to move. Prints one slide per page. */
+:root { --ink: #0b0b0c; --panel: #141415; --line: #2c2c2f; --bone: #ebe6da; --dim: #98948b; --soft: #cdc8bd; --signal: #ff5a1f;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; color: var(--bone); font-family: var(--display); overflow: hidden; }
+.slide { position: absolute; inset: 0; display: none; place-items: center; }
+.slide.on { display: grid; }
+.in { width: min(100vw, 177.78vh); height: min(56.25vw, 100vh); font-size: min(1vw, 1.7778vh); background: var(--ink); padding: 4.2em 5em 4.6em; position: relative; overflow: hidden; display: grid; gap: 2.4em; }
+h1 { margin: 0; font-stretch: 125%; font-weight: 900; font-size: 7.2em; letter-spacing: .04em; line-height: 1; }
+h2 { margin: 0 0 .5em; font-stretch: 116%; font-weight: 800; font-size: 3.1em; line-height: 1.08; letter-spacing: -.01em; }
+p, li { font-size: 1.62em; line-height: 1.4; color: var(--soft); margin: 0; }
+strong, b { color: var(--bone); }
+ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .6em; }
+ul li { padding-left: 1.1em; position: relative; }
+ul li::before { content: ""; position: absolute; left: 0; top: .55em; width: .42em; height: .42em; border-radius: 50%; background: var(--signal); }
+.two { grid-template-columns: 1fr 1fr; align-items: center; }
+.wide { grid-template-columns: 1.6fr 1fr; align-items: center; }
+.wide h2 { font-size: 2.7em; }
+.wide li { font-size: 1.5em; }
+.shot { width: 100%; border: 1px solid var(--line); border-radius: .5em; display: block; }
+.cap { font: 1.05em var(--mono); color: var(--dim); margin-top: .7em; }
+.mark { display: flex; align-items: center; gap: .9em; font-stretch: 125%; font-weight: 900; letter-spacing: .06em; font-size: 1.35em; }
+.dot { width: .62em; height: .62em; border-radius: 50%; background: var(--signal); box-shadow: -.55em .35em 0 -.17em var(--bone); margin-left: .55em; flex: none; }
+.foot { position: absolute; left: 5em; right: 5em; bottom: 1.7em; display: flex; justify-content: space-between; font: 1em var(--mono); color: var(--dim); }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: .45em 1.4em; font-size: 1.5em; }
+.meta dt { color: var(--dim); font-family: var(--mono); font-size: .82em; align-self: center; }
+.meta dd { margin: 0; font-weight: 600; }
+.title { grid-template-columns: 1.25fr .75fr; align-items: center; }
+.title .tag { font-size: 2.35em; line-height: 1.22; color: var(--bone); font-weight: 600; margin: .7em 0 1.3em; max-width: 21em; }
+.lens { position: relative; width: 82%; aspect-ratio: 1; border-radius: 50%; margin: 0 auto; }
+.lens::before { content: ""; position: absolute; inset: -6%; border-radius: 50%; background: repeating-conic-gradient(var(--dim) 0 .5deg, transparent .5deg 5deg); -webkit-mask: radial-gradient(closest-side, transparent calc(100% - .7em), #000 calc(100% - .62em)); mask: radial-gradient(closest-side, transparent calc(100% - .7em), #000 calc(100% - .62em)); opacity: .7; }
+.lens img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.lens img.b { animation: flip 2.4s steps(1) infinite; }
+@keyframes flip { 0% { opacity: 0; } 50% { opacity: 1; } }
+#mission { position: relative; width: 100%; aspect-ratio: 1.18; border: 1px solid var(--line); border-radius: .5em; overflow: hidden; background: var(--ink); }
+#mission canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mlabels { position: absolute; inset: 0; pointer-events: none; font: 12px var(--mono); }
+.mlabels span { position: absolute; left: 0; top: 0; white-space: nowrap; text-shadow: 0 0 5px #000, 0 0 2px #000; }
+.mlabels [data-k=craft], .mlabels [data-k=strip] { color: var(--signal); font-weight: 600; }
+.mlabels [data-k=sun] { color: #f5d547; }
+.mread { position: absolute; left: 14px; bottom: 12px; text-shadow: 0 0 6px #000; }
+.mread b { display: block; font-stretch: 118%; font-weight: 800; font-size: 18px; text-transform: uppercase; }
+.mread i { font: 12px var(--mono); font-style: normal; }
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 1em; align-items: stretch; }
+.flow div { border: 1px solid var(--line); border-radius: .5em; padding: 1.3em 1.4em; background: var(--panel); }
+.flow div b { display: block; font-size: 1.75em; font-weight: 800; font-stretch: 112%; margin-bottom: .35em; }
+.flow div span { font-size: 1.32em; line-height: 1.38; color: var(--soft); display: block; }
+.flow i { align-self: center; font-style: normal; font-size: 2.6em; color: var(--signal); }
+.srcs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; }
+.srcs div { border-left: .22em solid var(--signal); padding-left: 1em; }
+.srcs b { display: block; font-size: 1.45em; }
+.srcs span { font-size: 1.22em; color: var(--soft); line-height: 1.35; display: block; }
+.nums { display: grid; gap: 1.15em; }
+.nums div { display: grid; grid-template-columns: 9.6em 1fr; gap: 1.2em; align-items: center; }
+.nums b { font-stretch: 118%; font-weight: 900; font-size: 3.1em; white-space: nowrap; color: var(--signal); line-height: 1; text-align: right; }
+.nums span { font-size: 1.45em; line-height: 1.32; color: var(--soft); }
+.note { font-size: 1.25em; color: var(--dim); }
+.white { background: #fff; border-radius: .5em; padding: .5em; }
+.nav { position: fixed; right: 14px; top: 12px; opacity: .75; white-space: nowrap; display: flex; gap: 6px; align-items: center; font: 12px var(--mono); color: var(--dim); z-index: 5; }
+.nav button { font: inherit; color: var(--bone); background: #1d1d1f; border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+@media print {
+  @page { size: 13.333in 7.5in; margin: 0; }
+  html, body { overflow: visible; height: auto; background: var(--ink); }
+  .slide { position: static; display: grid !important; page-break-after: always; break-after: page; }
+  .in { width: 13.333in; height: 7.5in; font-size: .13333in; }
+  .nav, .lens::before { display: none; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
