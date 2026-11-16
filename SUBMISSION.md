@@ -5,9 +5,7 @@ Copy each block into the matching field on your team's project page, then press
 
 ## Before you paste
 
-1. Put your team name in `app/pages/slides/deck.js` (first line of code, `TEAM`), push, and wait
-   about a minute for the deploy. Slide 1 shows it. The rules require the team name and every
-   member's name on the slides.
+1. Team: **Spherical Software**. Member: **Nicholas Fabek**. Both are on slide 1.
 2. Open the three links below in a private browser window to confirm they load without a login.
 3. Read the "Use of AI" block and change anything that does not match what happened. The rules say
    AI must not be used to come up with the idea, and that AI-written code must be acknowledged.

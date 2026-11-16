@@ -1,5 +1,5 @@
 // Slide navigation for the submission deck. Team details live here so they are easy to change.
-const TEAM = { name: 'TEAM NAME', members: ['Nick Fabek'] };
+const TEAM = { name: 'Spherical Software', members: ['Nicholas Fabek'] };
 
 for (const el of document.querySelectorAll('[data-team]')) el.textContent = TEAM.name;
 for (const el of document.querySelectorAll('[data-members]')) el.textContent = TEAM.members.join(', ');
